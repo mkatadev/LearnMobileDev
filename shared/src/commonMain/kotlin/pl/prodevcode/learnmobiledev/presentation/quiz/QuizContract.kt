@@ -90,9 +90,6 @@ sealed interface QuizIntent : MviIntent {
         data class CategoryToggled(val category: QuizCategory) : Ui
         data object AllCategoriesSelected : Ui
         data object QuizStarted : Ui
-
-        /** The content language changed, so anything cached is now in the wrong locale. */
-        data object ContentInvalidated : Ui
         data class AnswerSelected(val index: Int) : Ui
         data object NextClicked : Ui
         data object RestartClicked : Ui

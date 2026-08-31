@@ -35,7 +35,6 @@ class ConcurrencyViewModel(
                 if (after.scenarios.isEmpty()) loadScenarios()
 
             is ConcurrencyIntent.Ui.RetryClicked -> loadScenarios()
-            is ConcurrencyIntent.Ui.ContentInvalidated -> loadScenarios()
 
             is ConcurrencyIntent.Ui.RunClicked ->
                 execute(intent.scenarioId, after)

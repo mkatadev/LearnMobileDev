@@ -31,7 +31,6 @@ class LearnViewModel(
         when (intent) {
             is LearnIntent.Ui.ScreenOpened -> if (after.lessons.isEmpty()) loadLessons()
             is LearnIntent.Ui.RetryClicked -> loadLessons()
-            is LearnIntent.Ui.ContentInvalidated -> loadLessons()
             else -> Unit
         }
     }

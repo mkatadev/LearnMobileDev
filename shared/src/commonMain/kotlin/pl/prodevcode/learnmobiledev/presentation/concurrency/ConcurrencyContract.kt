@@ -41,9 +41,6 @@ sealed interface ConcurrencyIntent : MviIntent {
     sealed interface Ui : ConcurrencyIntent {
         data object ScreenOpened : Ui
         data object RetryClicked : Ui
-
-        /** The content language changed, so anything cached is now in the wrong locale. */
-        data object ContentInvalidated : Ui
         data class ScenarioClicked(val scenarioId: String) : Ui
         data class RunClicked(val scenarioId: String) : Ui
         data object RunAllClicked : Ui

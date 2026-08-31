@@ -6,16 +6,18 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import pl.prodevcode.learnmobiledev.di.DEVICE_LANGUAGE
 import pl.prodevcode.learnmobiledev.data.preferences.AndroidKeyValueStore
-import pl.prodevcode.learnmobiledev.data.preferences.AndroidLanguageProvider
+import pl.prodevcode.learnmobiledev.data.preferences.AndroidPlatformLocale
 import pl.prodevcode.learnmobiledev.domain.repository.KeyValueStore
-import pl.prodevcode.learnmobiledev.domain.repository.LanguageProvider
+import pl.prodevcode.learnmobiledev.domain.repository.PlatformLocale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before anything reads a resource: Compose Resources resolves strings against
+        // Locale.getDefault(), and a fresh process always starts from the system locale.
+        AndroidPlatformLocale.restore(this)
+
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
@@ -24,9 +26,7 @@ class MainActivity : ComponentActivity() {
             App(
                 platformModule = module {
                     single<KeyValueStore> { AndroidKeyValueStore(applicationContext) }
-                    single<LanguageProvider>(named(DEVICE_LANGUAGE)) {
-                        AndroidLanguageProvider()
-                    }
+                    single<PlatformLocale> { AndroidPlatformLocale(applicationContext) }
                 },
             )
         }

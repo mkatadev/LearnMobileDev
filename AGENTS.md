@@ -17,12 +17,12 @@ review; where a test exists, it is named.
 | Test names and assertion messages | **English, always** | They are output, and output ends up in CI logs |
 | Exception messages | **English, always** | They go to logs and crash reporting, never to a screen |
 | Commit messages, this file, README | **English** | Same reason |
-| UI strings | **JSON catalogue only** | `files/en/strings.json`, `files/pl/strings.json` |
-| Course content (lessons, quiz, scenarios) | **JSON assets only** | `files/en/`, `files/pl/` |
+| UI strings | **String resources only** | `composeResources/values/strings.xml`, `values-pl/strings.xml` |
+| Course content (lessons, quiz, scenarios) | **Served by `:fakeApi`** | `fakeApi/…/composeResources/files/<lang>/` |
 
 Two tests enforce this rather than trusting discipline: `CodeLanguagePolicyTest` rejects
 Polish characters and hard-coded `Text("…")` literals in Kotlin sources, and
-`StringCatalogContentTest` rejects an incomplete catalogue.
+`StringResourcesTest` rejects an incomplete set of translations.
 
 **No Polish anywhere in `.kt` files.** Not in comments, not in KDoc, not in test names,
 not in string literals. The only tolerated exception is fictional personal data in demo
@@ -110,66 +110,89 @@ assert on independently of the current language.
 
 ### UI strings
 
-Strings live in `composeResources/files/<lang>/strings.json` and are looked up through
-`AppString` (a generated-style enum of keys) and `LocalStrings`.
+Strings are ordinary Android string resources, looked up through `AppString` — an enum of
+keys — and resolved by `localized()`:
+
+```
+shared/src/commonMain/composeResources/
+├─ values/strings.xml      <- default (en)
+└─ values-pl/strings.xml   <- Polish
+```
 
 ```kotlin
 Text(localized(AppString.QuizStart))
 Text(localized(AppString.QuizScore, correct, total))
 ```
 
-**Why not Compose Resources `values-pl/`?** Because `Res.string` resolves the locale from
-the **system** setting, and in Compose Multiplatform 1.11 that cannot be overridden:
-`ResourceEnvironment` has an internal constructor and `LocalComposeEnvironment` is
-internal. With an in-app language switch the course content would change while tab labels
-and buttons stayed in the system language.
+`AppString` maps a key onto a `StringResource` through the generated `Res.allStringResources`
+rather than a 128-branch `when`. A mapping that large is a place for a copy-paste mistake to
+hide; `StringResourcesTest` proves every key resolves, which a hand-written `when` could not.
 
 Consequences worth knowing:
 
-- Adding a string means one entry in `AppString` plus one key in **every**
-  `strings.json`. `StringCatalogContentTest` fails the build on a missing key, an unused
-  key, a blank value, or a translation whose `%1$s` placeholders do not match the default.
-- A missing key at runtime renders the key itself rather than throwing — a defect should
-  be visible during development, never a crash in a user's hands.
-- The catalogue is gated at startup: `AppContent` renders a brand-coloured screen until
-  both the theme and the strings are loaded, so nothing ever flashes raw keys.
+- Adding a string means one entry in `AppString` plus one `<string>` in **every**
+  `strings.xml`. `StringResourcesTest` fails the build on a missing key, an unused key, a
+  blank value, a duplicate, or a translation whose `%1$s` placeholders do not match the
+  default.
+- A key with no resource behind it throws when that screen opens. That is why the test is
+  not optional.
 
 ### Course content
 
-Compose Resources applies qualifiers to `values/` and `drawable/`, but **not** to `files/`.
-Localized content therefore lives in one directory per language:
+Lessons, questions and scenarios are **not** app resources. They are the content service's
+data and live in `:fakeApi`, one directory per language:
 
 ```
-composeResources/files/
-├─ en/{strings,lessons,questions,scenarios}.json   <- default
-└─ pl/{strings,lessons,questions,scenarios}.json
+fakeApi/src/commonMain/composeResources/files/
+├─ en/{lessons,questions,scenarios}.json   <- default
+└─ pl/{lessons,questions,scenarios}.json
 ```
 
-`LocalizedAsset` resolves the path from `LanguageProvider`; an unsupported language falls
-back to `en`. Adding a language means adding one directory and one enum entry — no other
-code changes.
+Nothing above the HTTP boundary can reach them: the app has no path to another module's
+resources and must go through `GET /api/v1/content/{resource}?lang=xx`. Language negotiation
+happens on the server (`LanguageCatalog`), which answers with the translation it has and
+reports it in `Content-Language`; an unsupported language falls back to `en`.
 
-`LanguageProvider` is a port with per-platform implementations (`Locale.getDefault()` on
-Android, `NSLocale.preferredLanguages` on iOS). `EffectiveLanguage` decorates it with the
-user's choice and is the single source of truth for every data source.
+`BundledContentTest` guards the data set — every published resource, in every served
+language, and nothing the service does not publish.
 
 ### In-app language switching
 
-The device language decides only the **initial** value; after that the choice is explicit
-and persisted. There is deliberately no "system" variant of either `AppLanguage` or
-`ThemeMode` — a third option that renders identically to one of the other two is a state
-nobody can reason about.
+**A language change takes effect on the next launch, and the app says so.**
 
-Because repositories cache parsed JSON, **every content cache is keyed by language**:
+The header opens a picker listing every `AppLanguage`, each written in its own name
+(`English`, `Polski`) in *every* locale — a picker that translates its options hides the one
+entry a user who cannot read the current language is looking for. The restart line appears
+only once a change is actually pending; a warning that is always on screen stops being read.
 
-```kotlin
-private var cached: Pair<String, List<Lesson>>? = null
-```
+There is no "close the app" button: Android could finish the activity, but no supported API
+relaunches an iOS app, and a button that worked on one platform only would be worse than
+none.
 
-A plain field would keep serving the previous locale after a switch. On top of that,
-`AppShellState.contentRevision` is bumped only when the *effective* language really
-changed, and screens key their reload on it — so switching to a language that resolves to
-the same tag does not trigger a pointless reload.
+Resources follow the *platform* locale, and Compose Multiplatform 1.11 seals that off:
+`ResourceEnvironment` has an internal constructor and `LocalComposeEnvironment` is internal,
+so there is no supported way to re-resolve resources in-process. The switch therefore writes
+the choice to the platform and asks the user to restart:
+
+| Platform | Mechanism | Read back at launch by |
+|---|---|---|
+| Android | SharedPreferences + `Locale.setDefault` in `MainActivity.onCreate` | `Locale.getDefault()` |
+| iOS | `AppleLanguages` in `NSUserDefaults` | `NSLocale.preferredLanguages` |
+
+`AppCompatDelegate.setApplicationLocales` would avoid the restart on Android, but it drags
+in AppCompat, exists only there, and would leave the same switch behaving differently on
+each platform. No API restarts an iOS app at all — `exit(0)` is indistinguishable from a
+crash and is grounds for App Store rejection. Both platforms therefore ask.
+
+`PlatformLocale` is the single source of language: `LanguageProvider` delegates to it, so
+content and UI strings can never disagree about which language is on screen.
+`AppShellState.language` is what the platform reported at launch — never the stored
+preference, which may already point at a language the UI is demonstrably not rendering in.
+`pendingLanguage` carries the scheduled choice so the UI can explain itself rather than
+appear to have ignored the tap.
+
+Because the language cannot change mid-session, content caches cannot go stale and screens
+need no reload machinery.
 
 ---
 
@@ -180,7 +203,7 @@ Dependencies point inward: **presentation → domain ← data**.
 ```
 shared/src/commonMain/kotlin/pl/prodevcode/learnmobiledev/
 ├─ core/mvi/        MVI framework, feature-agnostic
-├─ core/ui/         AppString, StringCatalog, UiText — text as a key, not a resolved string
+├─ core/ui/         AppString, UiText — text as a key, not a resolved string
 ├─ domain/
 │  ├─ model/        plain Kotlin, no framework annotations
 │  ├─ repository/   PORTS (interfaces) + domain exceptions
@@ -209,7 +232,7 @@ The codebase uses both, and picking the wrong one is easy. The question is wheth
 thing has behaviour worth substituting.
 
 **Default to an interface in `commonMain` plus a per-platform implementation wired through
-DI.** `KeyValueStore` and `LanguageProvider` work that way: tests supply their own
+DI.** `KeyValueStore` and `PlatformLocale` work that way: tests supply their own
 implementation, previews get an in-memory one, and the dependency stays visible in the
 constructor signature.
 
@@ -282,13 +305,14 @@ Rules:
 - **Assert on message identity, not wording.** `assertEquals(AppString.X.asUiText(),
   state.error)` survives copy changes and new translations.
 - **Content is data, so validate it like data.** `LessonsContentTest`,
-  `QuestionsContentTest` and `StringCatalogContentTest` parse the real shipped files —
+  `QuestionsContentTest`, `StringResourcesTest` and `BundledContentTest` parse the real
+  shipped files —
   every locale, not just the default — and check unique ids, non-empty blocks, table column
   counts, explanation length, matching `%1$s` placeholders and, for the quiz, that correct
   answers are not always at the same index.
 - **Guard the promises made in this file.** Where a rule claims something is easy ("adding
   a language is one enum entry plus one directory"), a test enforces it. Rules that only
-  live in prose rot; `CodeLanguagePolicyTest` and `StringCatalogContentTest` exist for
+  live in prose rot; `CodeLanguagePolicyTest` and `StringResourcesTest` exist for
   exactly that reason.
 - **A demonstration of a bug must fail.** `CoroutineConcurrencyLabTest` asserts
   `assertFalse(result.passed)` for buggy scenarios. If someone "fixes" the demo, the test
@@ -343,7 +367,7 @@ Before calling a change complete:
 2. `CodeLanguagePolicyTest` passes — it covers both the Polish check and hard-coded UI
    text, so there is no need to run the grep by hand.
 3. New user-facing text has an `AppString` entry and a key in **both**
-   `files/en/strings.json` and `files/pl/strings.json`.
+   `values/strings.xml` and `values-pl/strings.xml`.
 4. New course content exists in **both** `files/en/` and `files/pl/`.
 5. New logic has a test; new content is covered by the content-validation tests.
 6. README is updated when behaviour or structure changed, and **this file** is updated

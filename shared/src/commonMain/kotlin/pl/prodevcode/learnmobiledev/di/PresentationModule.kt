@@ -31,5 +31,5 @@ val presentationModule: Module = module {
     viewModel { LearnViewModel(get()) }
     viewModel { ConcurrencyViewModel(get(), get()) }
     viewModel { QuizViewModel(get()) }
-    viewModel { AppShellViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { AppShellViewModel(get(), get(), get(), get()) }
 }

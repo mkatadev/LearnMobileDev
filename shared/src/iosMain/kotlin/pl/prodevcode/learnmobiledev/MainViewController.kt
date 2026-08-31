@@ -1,13 +1,11 @@
 package pl.prodevcode.learnmobiledev
 
 import androidx.compose.ui.window.ComposeUIViewController
-import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import pl.prodevcode.learnmobiledev.di.DEVICE_LANGUAGE
-import pl.prodevcode.learnmobiledev.data.preferences.IosLanguageProvider
+import pl.prodevcode.learnmobiledev.data.preferences.IosPlatformLocale
 import pl.prodevcode.learnmobiledev.data.preferences.NsUserDefaultsKeyValueStore
 import pl.prodevcode.learnmobiledev.domain.repository.KeyValueStore
-import pl.prodevcode.learnmobiledev.domain.repository.LanguageProvider
+import pl.prodevcode.learnmobiledev.domain.repository.PlatformLocale
 
 /**
  * Entry point for iOS. The platform module provides persistent storage based on
@@ -17,7 +15,7 @@ fun MainViewController() = ComposeUIViewController {
     App(
         platformModule = module {
             single<KeyValueStore> { NsUserDefaultsKeyValueStore() }
-            single<LanguageProvider>(named(DEVICE_LANGUAGE)) { IosLanguageProvider() }
+            single<PlatformLocale> { IosPlatformLocale() }
         },
     )
 }

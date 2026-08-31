@@ -18,6 +18,7 @@ package pl.prodevcode.learnmobiledev.core.ui
  */
 enum class AppString(val key: String) {
     ActionBack("action_back"),
+    ActionDone("action_done"),
     ActionClear("action_clear"),
     ActionHide("action_hide"),
     ActionReset("action_reset"),
@@ -47,8 +48,12 @@ enum class AppString(val key: String) {
     ErrorScenariosUnavailable("error_scenarios_unavailable"),
     ErrorUnknown("error_unknown"),
     LanguageEnglish("language_english"),
+    LanguageNameEnglish("language_name_english"),
+    LanguageNamePolish("language_name_polish"),
+    LanguagePickerTitle("language_picker_title"),
     LanguagePolish("language_polish"),
-    LanguageToggleDescription("language_toggle_description"),
+    LanguageRestartHint("language_restart_hint"),
+    LanguagePickerDescription("language_picker_description"),
     LearnDoneBadge("learn_done_badge"),
     LearnExercisePrefix("learn_exercise_prefix"),
     LearnMarkDone("learn_mark_done"),

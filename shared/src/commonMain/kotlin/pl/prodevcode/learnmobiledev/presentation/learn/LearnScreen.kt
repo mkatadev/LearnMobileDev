@@ -61,7 +61,7 @@ fun LearnScreen(
     themeLabel: AppString,
     languageLabel: AppString,
     onToggleTheme: () -> Unit,
-    onToggleLanguage: () -> Unit,
+    onOpenLanguagePicker: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
@@ -76,7 +76,7 @@ fun LearnScreen(
             themeLabel = themeLabel,
             languageLabel = languageLabel,
             onToggleTheme = onToggleTheme,
-            onToggleLanguage = onToggleLanguage,
+            onOpenLanguagePicker = onOpenLanguagePicker,
             onReset = { viewModel.dispatch(LearnIntent.Ui.ProgressReset) },
         )
 
@@ -121,7 +121,7 @@ private fun ProgressHeader(
     themeLabel: AppString,
     languageLabel: AppString,
     onToggleTheme: () -> Unit,
-    onToggleLanguage: () -> Unit,
+    onOpenLanguagePicker: () -> Unit,
     onReset: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = Spacing.screenTop, bottom = Spacing.itemSpacing)) {
@@ -142,9 +142,9 @@ private fun ProgressHeader(
                 )
             }
             Spacer(Modifier.width(Spacing.small))
-            val languageDescription = localized(AppString.LanguageToggleDescription)
+            val languageDescription = localized(AppString.LanguagePickerDescription)
             TextButton(
-                onClick = onToggleLanguage,
+                onClick = onOpenLanguagePicker,
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.semantics { contentDescription = languageDescription },
             ) {

@@ -6,8 +6,8 @@ import androidx.compose.runtime.Composable
  * Text intended for the user, described **without** resolving it to a String.
  *
  * The problem this solves: a store cannot resolve text, because resolution needs the
- * composition (see [LocalStrings]). Baking a translated string into the presentation layer
- * would also make messages impossible to assert on independently of the current language.
+ * composition. Baking a translated string into the presentation layer would also make
+ * messages impossible to assert on independently of the current language.
  *
  * With [UiText] the store says *which* message to show, and the Compose layer decides
  * *how it reads* in the active language.
@@ -28,7 +28,7 @@ sealed interface UiText {
 @Composable
 fun UiText.resolve(): String = when (this) {
     is UiText.Raw -> value
-    is UiText.Resource -> LocalStrings.current[id, args]
+    is UiText.Resource -> localized(id, *args.toTypedArray())
 }
 
 /** Shorthand for building messages inside stores. */

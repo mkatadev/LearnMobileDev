@@ -69,32 +69,72 @@ class AppShellReducerTest {
     }
 
     @Test
-    fun `applying a language records it and bumps the content revision`() {
+    fun `the restored language is the one on screen`() {
         val result = reduce(
             AppShellState(),
-            AppShellIntent.Internal.LanguageApplied(AppLanguage.Polish, contentChanged = true),
+            AppShellIntent.Internal.LanguageRestored(AppLanguage.Polish),
         )
 
         assertEquals(AppLanguage.Polish, result.language)
-        assertEquals(1, result.contentRevision)
+        kotlin.test.assertNull(result.pendingLanguage)
     }
 
     @Test
-    fun `an unchanged language leaves the content revision alone`() {
-        // Screens key their reload on the revision, so bumping it here would cause a
-        // pointless reload of identical content.
+    fun `a scheduled language is pending and does not change the current one`() {
+        // Resources were resolved at launch, so the UI is still rendering the old
+        // language. Claiming otherwise would contradict what is on screen.
         val result = reduce(
-            AppShellState(contentRevision = 3),
-            AppShellIntent.Internal.LanguageApplied(AppLanguage.English, contentChanged = false),
+            AppShellState(language = AppLanguage.English),
+            AppShellIntent.Internal.LanguageScheduled(AppLanguage.Polish),
         )
 
-        assertEquals(3, result.contentRevision)
+        assertEquals(AppLanguage.English, result.language)
+        assertEquals(AppLanguage.Polish, result.pendingLanguage)
     }
 
     @Test
-    fun `the language toggle alternates between the two languages`() {
-        assertEquals(AppLanguage.Polish, AppLanguage.English.next())
-        assertEquals(AppLanguage.English, AppLanguage.Polish.next())
+    fun `scheduling the language already in effect clears the notice`() {
+        // Toggling twice lands back where it started: nothing will change on restart, so
+        // asking the user to restart would be a lie.
+        val result = reduce(
+            AppShellState(language = AppLanguage.English, pendingLanguage = AppLanguage.Polish),
+            AppShellIntent.Internal.LanguageScheduled(AppLanguage.English),
+        )
+
+        kotlin.test.assertNull(result.pendingLanguage)
+    }
+
+    @Test
+    fun `closing the picker keeps the scheduled language`() {
+        // Only the dialog goes away; the choice is already stored on the platform and
+        // still applies on the next launch.
+        val result = reduce(
+            AppShellState(pendingLanguage = AppLanguage.Polish, isLanguagePickerVisible = true),
+            AppShellIntent.Ui.LanguagePickerDismissed,
+        )
+
+        kotlin.test.assertFalse(result.isLanguagePickerVisible)
+        assertEquals(AppLanguage.Polish, result.pendingLanguage)
+    }
+
+    @Test
+    fun `the picker preselects the scheduled language rather than the active one`() {
+        // Reopening the picker must show what will happen, otherwise the choice the user
+        // just made looks like it was discarded.
+        val state = AppShellState(
+            language = AppLanguage.English,
+            pendingLanguage = AppLanguage.Polish,
+        )
+
+        assertEquals(AppLanguage.Polish, state.selectedLanguage)
+    }
+
+    @Test
+    fun `the picker preselects the active language when nothing is scheduled`() {
+        assertEquals(
+            AppLanguage.English,
+            AppShellState(language = AppLanguage.English).selectedLanguage,
+        )
     }
 
     @Test

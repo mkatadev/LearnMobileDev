@@ -19,10 +19,6 @@ val QuizReducer = Reducer<QuizState, QuizIntent> { state, intent ->
         is QuizIntent.Ui.ScreenOpened -> state
         is QuizIntent.Ui.QuizStarted -> state
 
-        // An in-flight session is abandoned: continuing it would mix languages mid-quiz.
-        is QuizIntent.Ui.ContentInvalidated -> QuizState(
-            selectedCategories = state.selectedCategories,
-        )
         is QuizIntent.Ui.RetryMistakesClicked -> state
 
         is QuizIntent.Ui.CategoryToggled -> state.copy(

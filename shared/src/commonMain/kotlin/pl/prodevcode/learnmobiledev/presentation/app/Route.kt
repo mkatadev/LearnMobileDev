@@ -34,7 +34,18 @@ fun ThemeMode.labelRes(): AppString = when (this) {
     ThemeMode.Dark -> AppString.ThemeDark
 }
 
-/** Label of the current content language. */
+/**
+ * The language's own name, for the picker.
+ *
+ * Deliberately identical in every locale: a picker that translates its options hides the
+ * one entry a user who cannot read the current language is looking for.
+ */
+fun AppLanguage.nameRes(): AppString = when (this) {
+    AppLanguage.English -> AppString.LanguageNameEnglish
+    AppLanguage.Polish -> AppString.LanguageNamePolish
+}
+
+/** Short label of the current content language, for the header button. */
 fun AppLanguage.labelRes(): AppString = when (this) {
     AppLanguage.English -> AppString.LanguageEnglish
     AppLanguage.Polish -> AppString.LanguagePolish
