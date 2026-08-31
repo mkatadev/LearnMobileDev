@@ -53,7 +53,6 @@ kotlin {
             implementation(libs.compose.components.resources)
             api(libs.ktor.client.core)
             implementation(libs.ktor.client.mock)
-            implementation(libs.ktor.client.logging)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

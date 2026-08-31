@@ -1,7 +1,7 @@
-package pl.prodevcode.learnmobiledev.fakeapi
+package pl.prodevcode.learnmobiledev.data.remote
 
 /** Prefix on every logged line, so the console can be filtered down to HTTP traffic. */
-internal const val HTTP_LOG_TAG: String = "FakeBackend"
+internal const val HTTP_LOG_TAG: String = "ContentHttp"
 
 /**
  * Writes one line of HTTP traffic to the platform's logging facility.

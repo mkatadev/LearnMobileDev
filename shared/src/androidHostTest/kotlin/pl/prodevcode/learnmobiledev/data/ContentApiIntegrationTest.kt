@@ -9,6 +9,7 @@ import pl.prodevcode.learnmobiledev.data.remote.ApiLessonsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiQuestionsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiScenariosSource
 import pl.prodevcode.learnmobiledev.data.remote.ContentApi
+import pl.prodevcode.learnmobiledev.data.remote.createContentHttpClient
 import pl.prodevcode.learnmobiledev.data.repository.LessonJsonRepository
 import pl.prodevcode.learnmobiledev.domain.model.AppLanguage
 import pl.prodevcode.learnmobiledev.domain.repository.LanguageProvider
@@ -40,11 +41,14 @@ class ContentApiIntegrationTest {
     }
 
     private fun apiFor(language: String): ContentApi {
-        val client = FakeBackend.createClient(
-            storage = storage,
-            languages = LanguageCatalog(AppLanguage.SUPPORTED_TAGS, AppLanguage.DEFAULT.tag),
-            // No artificial latency: this test asserts wiring, not loading states.
-            config = FakeBackendConfig(latencyMillis = 0),
+        val client = createContentHttpClient(
+            engine = FakeBackend.createEngine(
+                storage = storage,
+                languages = LanguageCatalog(AppLanguage.SUPPORTED_TAGS, AppLanguage.DEFAULT.tag),
+                // No artificial latency: this test asserts wiring, not loading states.
+                config = FakeBackendConfig(latencyMillis = 0),
+            ),
+            baseUrl = FakeBackend.BASE_URL,
         )
         return ContentApi(client, LanguageProvider { language })
     }

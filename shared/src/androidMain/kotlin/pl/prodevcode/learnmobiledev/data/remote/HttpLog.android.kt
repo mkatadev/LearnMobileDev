@@ -1,4 +1,4 @@
-package pl.prodevcode.learnmobiledev.fakeapi
+package pl.prodevcode.learnmobiledev.data.remote
 
 import android.util.Log
 
