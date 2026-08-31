@@ -7,7 +7,6 @@ import org.koin.dsl.module
 import pl.prodevcode.learnmobiledev.data.EffectiveLanguage
 import pl.prodevcode.learnmobiledev.data.concurrency.CoroutineConcurrencyLab
 import pl.prodevcode.learnmobiledev.data.preferences.KeyValueLanguagePreferences
-import pl.prodevcode.learnmobiledev.data.backend.BundledContentStorage
 import pl.prodevcode.learnmobiledev.data.remote.ApiLessonsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiQuestionsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiScenariosSource
@@ -59,7 +58,6 @@ val dataModule: Module = module {
     // it, so adding a value to AppLanguage cannot leave the service serving English.
     single {
         FakeBackend.createClient(
-            storage = BundledContentStorage(),
             languages = LanguageCatalog(
                 supported = AppLanguage.SUPPORTED_TAGS,
                 default = AppLanguage.DEFAULT.tag,

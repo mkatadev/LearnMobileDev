@@ -32,9 +32,9 @@ import pl.prodevcode.learnmobiledev.fakeapi.LanguageCatalog
  */
 class ContentApiIntegrationTest {
 
-    /** The same documents the app bundles, read straight from the source tree. */
+    /** The very documents the backend bundles, read straight from its source tree. */
     private val storage = ContentStorage { language, resource ->
-        File("src/commonMain/composeResources/files/$language/$resource.json")
+        File("../fakeApi/src/commonMain/composeResources/files/$language/$resource.json")
             .takeIf { it.exists() }
             ?.readText()
     }

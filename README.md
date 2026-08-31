@@ -82,10 +82,12 @@ shared/src/commonMain/kotlin/pl/prodevcode/learnmobiledev/
 ├─ presentation/    Contract + Reducer + ViewModel + Screen, per feature
 └─ di/              Koin modules, one per layer
 
-fakeApi/src/commonMain/kotlin/pl/prodevcode/learnmobiledev/fakeapi/
-├─ http/            request, response, router with path templates
-├─ routes/          the endpoints this service publishes
-└─ ...              storage port, language catalogue, client factory
+fakeApi/src/commonMain/
+├─ kotlin/.../fakeapi/
+│  ├─ http/         request, response, router with path templates
+│  ├─ routes/       the endpoints this service publishes
+│  └─ ...           storage, language catalogue, client factory
+└─ composeResources/files/<lang>/   lessons, questions, scenarios — the service's data
 ```
 
 ### The content backend
@@ -105,11 +107,15 @@ uses an ordinary Ktor client and cannot tell the difference. Swapping in a deplo
 means changing an engine and a base URL, nothing else. A Ktor `MockEngine` rather than an
 embedded server, because a real server would not run on iOS.
 
+The content documents live in `:fakeApi`, not in the app. They are the service's database,
+and keeping them there means nothing above the HTTP boundary can reach them: the app has no
+path to another module's resources and must go through the API, exactly as it would against
+a real server. Only `strings.json` stays in `:shared` — UI text is the app's own.
+
 Language negotiation lives on the server, where it belongs: the client states a preference,
 the backend answers with the translation it actually has and reports it in
 `Content-Language`. `FakeBackendConfig` adds latency and an outage switch, so loading and
-failure states can be exercised on demand. UI strings stay bundled — they are not backend
-data.
+failure states can be exercised on demand.
 
 ### The MVI core
 

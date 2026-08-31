@@ -18,7 +18,7 @@ import pl.prodevcode.learnmobiledev.domain.model.QuizCategory
 class QuestionsContentTest {
 
     /** Every shipped locale is validated, not just the default one. */
-    private val locales = File("src/commonMain/composeResources/files")
+    private val locales = File(CONTENT_ROOT)
         .listFiles()
         ?.filter { it.isDirectory }
         ?.sortedBy { it.name }
@@ -101,3 +101,10 @@ class QuestionsContentTest {
         )
     }
 }
+
+/**
+ * The content is the backend's data, so it lives in the `:fakeApi` module. The parsers that
+ * interpret it live here, which is why the test does too: it is the contract between the
+ * two, and a relative path across modules is the cheapest way to express it.
+ */
+private const val CONTENT_ROOT = "../fakeApi/src/commonMain/composeResources/files"

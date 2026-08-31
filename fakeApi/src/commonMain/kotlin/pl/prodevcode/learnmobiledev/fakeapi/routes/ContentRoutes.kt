@@ -6,9 +6,9 @@ import pl.prodevcode.learnmobiledev.fakeapi.http.ApiResponse
 import pl.prodevcode.learnmobiledev.fakeapi.http.RoutingBuilder
 
 /** The documents this backend publishes. Anything else is a `404`, not a crash. */
-internal val CONTENT_RESOURCES = setOf("lessons", "questions", "scenarios")
+val CONTENT_RESOURCES = setOf("lessons", "questions", "scenarios")
 
-internal const val CONTENT_PATH = "/api/v1/content/{resource}"
+const val CONTENT_PATH = "/api/v1/content/{resource}"
 
 /**
  * `GET /api/v1/content/{resource}?lang=xx`

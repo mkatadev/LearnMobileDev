@@ -46,10 +46,15 @@ object FakeBackend {
     /** Any absolute host works, since no packet ever leaves the process. */
     const val BASE_URL: String = "https://fake.learnmobiledev.local"
 
+    /**
+     * @param storage defaults to the documents bundled with this module. Callers are not
+     *   expected to pass one — the service owns its data. Tests override it to stand the
+     *   backend up on fixtures.
+     */
     fun createClient(
-        storage: ContentStorage,
         languages: LanguageCatalog,
         config: FakeBackendConfig = FakeBackendConfig(),
+        storage: ContentStorage = BundledContentStorage(),
     ): HttpClient {
         val router = routing { contentRoutes(storage, languages) }
         return HttpClient(MockEngine) {

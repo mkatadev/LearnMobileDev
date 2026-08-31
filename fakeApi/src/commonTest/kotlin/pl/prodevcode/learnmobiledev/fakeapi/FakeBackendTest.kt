@@ -25,7 +25,7 @@ class FakeBackendTest {
     private val languages = LanguageCatalog(supported = setOf("en", "pl"), default = "en")
 
     private fun client(config: FakeBackendConfig = FakeBackendConfig(latencyMillis = 0)) =
-        FakeBackend.createClient(storage, languages, config)
+        FakeBackend.createClient(languages, config, storage)
 
     @Test
     fun `a stored document is served verbatim`() = runTest {

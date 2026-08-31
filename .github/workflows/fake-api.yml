@@ -52,6 +52,12 @@ jobs:
         # surface.
         run: ./gradlew :fakeApi:testAndroidHostTest --no-daemon
 
+      - name: Content tests
+        # The shipped documents are data, so they are validated like data: the parsers in
+        # :shared are pointed at the backend's bundle, and a typo in a lesson breaks the
+        # build rather than someone's screen.
+        run: ./gradlew :shared:testAndroidHostTest --tests '*ContentTest*' --no-daemon
+
       - name: Contract tests
         # The backend is only useful if the app can still talk to it, and this is the one
         # suite that exercises the whole path end to end. A change to a status code or a
