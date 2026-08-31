@@ -61,6 +61,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serializationJson)
             implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.logging)
             // The content backend. A separate module so that the app can only reach it
             // through HTTP, never by calling into it directly.
             implementation(project(":fakeApi"))
