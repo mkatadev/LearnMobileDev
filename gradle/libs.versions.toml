@@ -15,6 +15,7 @@ kotlin = "2.4.10"
 koin = "4.1.0"
 kotlinxCoroutines = "1.10.2"
 kotlinxSerialization = "1.9.0"
+ktor = "3.5.2"
 material3 = "1.11.0-alpha07"
 
 [libraries]
@@ -33,6 +34,8 @@ koin-composeViewModel = { module = "io.insert-koin:koin-compose-viewmodel", vers
 koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 kotlinx-serializationJson = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
