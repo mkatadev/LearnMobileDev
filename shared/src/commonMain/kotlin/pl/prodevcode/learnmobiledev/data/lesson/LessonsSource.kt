@@ -1,26 +1,13 @@
 package pl.prodevcode.learnmobiledev.data.lesson
 
-import learnmobiledev.shared.generated.resources.Res
-import org.jetbrains.compose.resources.ExperimentalResourceApi
-import pl.prodevcode.learnmobiledev.data.LocalizedAsset
-import pl.prodevcode.learnmobiledev.domain.repository.LanguageProvider
-
 /**
- * Raw source of course content. Extracted behind an interface because `Res.readBytes` requires a
- * Context on Android, and unit tests must run without an emulator.
+ * Raw source of course content. Extracted behind an interface so that *where* the bytes come
+ * from stays replaceable: it used to be a bundled asset, it is now an HTTP call to the
+ * content service, and tests substitute a literal string without touching a network or an
+ * emulator.
+ *
+ * @see pl.prodevcode.learnmobiledev.data.remote.ApiLessonsSource
  */
 fun interface LessonsSource {
     suspend fun readContent(): String
-}
-
-/**
- * Production source reading `composeResources/files/<lang>/lessons.json`, falling back to
- * the default language when the device language has no translation.
- */
-@OptIn(ExperimentalResourceApi::class)
-class ComposeResourceLessonsSource(
-    private val languageProvider: LanguageProvider,
-) : LessonsSource {
-    override suspend fun readContent(): String =
-        Res.readBytes(LocalizedAsset.path("lessons", languageProvider)).decodeToString()
 }

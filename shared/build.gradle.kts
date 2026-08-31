@@ -60,6 +60,10 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serializationJson)
+            implementation(libs.ktor.client.core)
+            // The content backend. A separate module so that the app can only reach it
+            // through HTTP, never by calling into it directly.
+            implementation(project(":fakeApi"))
             api(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.composeViewModel)

@@ -1,0 +1,87 @@
+package pl.prodevcode.learnmobiledev.fakeapi
+
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.HttpResponseData
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.delay
+import pl.prodevcode.learnmobiledev.fakeapi.http.ApiRequest
+import pl.prodevcode.learnmobiledev.fakeapi.http.ApiResponse
+import pl.prodevcode.learnmobiledev.fakeapi.http.routing
+import pl.prodevcode.learnmobiledev.fakeapi.routes.contentRoutes
+
+/**
+ * Knobs that make the fake behave like a real network rather than a function call.
+ *
+ * @param latencyMillis artificial round-trip time. Without it every response arrives in
+ *   the same frame, loading states never render, and races stay hidden until a real device
+ *   on a real connection finds them.
+ * @param unavailable consulted per request. A lambda rather than a flag, so the app can
+ *   flip the backend into a failing state at runtime and exercise its error paths.
+ */
+data class FakeBackendConfig(
+    val latencyMillis: Long = 150,
+    val unavailable: () -> Boolean = { false },
+)
+
+/**
+ * An in-process stand-in for the content service.
+ *
+ * The point is that only the *transport* is fake. Above it there is a genuine HTTP surface
+ * — paths, query parameters, status codes, headers — and below it genuine routing and
+ * storage. The app talks to it with an ordinary Ktor [HttpClient] and cannot tell the
+ * difference; replacing this with a deployed server means changing a base URL and an
+ * engine, nothing else.
+ *
+ * It runs on every target, including iOS, which a real embedded server would not.
+ */
+object FakeBackend {
+
+    /** Any absolute host works, since no packet ever leaves the process. */
+    const val BASE_URL: String = "https://fake.learnmobiledev.local"
+
+    fun createClient(
+        storage: ContentStorage,
+        languages: LanguageCatalog,
+        config: FakeBackendConfig = FakeBackendConfig(),
+    ): HttpClient {
+        val router = routing { contentRoutes(storage, languages) }
+        return HttpClient(MockEngine) {
+            engine {
+                addHandler { request ->
+                    if (config.latencyMillis > 0) delay(config.latencyMillis)
+
+                    val response = if (config.unavailable()) {
+                        ApiResponse.serviceUnavailable("the content service is temporarily unavailable")
+                    } else {
+                        router.handle(request.toApiRequest())
+                    }
+
+                    respondWith(response)
+                }
+            }
+            install(DefaultRequest) { url(BASE_URL) }
+        }
+    }
+}
+
+private fun HttpRequestData.toApiRequest(): ApiRequest = ApiRequest(
+    method = method.value,
+    path = url.encodedPath,
+    query = url.parameters.entries().associate { (name, values) -> name to values.first() },
+)
+
+private fun MockRequestHandleScope.respondWith(response: ApiResponse): HttpResponseData = respond(
+    content = response.body,
+    status = HttpStatusCode.fromValue(response.status),
+    headers = Headers.build {
+        append(HttpHeaders.ContentType, response.contentType)
+        response.headers.forEach { (name, value) -> append(name, value) }
+    },
+)
