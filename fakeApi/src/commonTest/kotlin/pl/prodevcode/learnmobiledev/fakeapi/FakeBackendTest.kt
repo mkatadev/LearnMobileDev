@@ -1,6 +1,9 @@
 package pl.prodevcode.learnmobiledev.fakeapi
 
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,7 +28,9 @@ class FakeBackendTest {
     private val languages = LanguageCatalog(supported = setOf("en", "pl"), default = "en")
 
     private fun client(config: FakeBackendConfig = FakeBackendConfig(latencyMillis = 0)) =
-        FakeBackend.createClient(languages, config, storage)
+        HttpClient(FakeBackend.createEngine(languages, config, storage)) {
+            install(DefaultRequest) { url(FakeBackend.BASE_URL) }
+        }
 
     @Test
     fun `a stored document is served verbatim`() = runTest {

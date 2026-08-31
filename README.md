@@ -204,6 +204,9 @@ For iOS, open `iosApp/iosApp.xcodeproj` in Xcode and run.
 
 Watch Logcat while using the app: `LoggingMiddleware` prints every reduction as
 `intent → state before → state after`, which makes unidirectional data flow visible.
+Ktor's `Logging` plugin prints every exchange with the backend under the
+`ContentHttp` tag (`Log.d` on Android, `NSLog` on iOS); switch it off with
+`logTraffic = false` in `dataModule`.
 
 ---
 

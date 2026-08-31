@@ -1,10 +1,9 @@
 package pl.prodevcode.learnmobiledev.fakeapi
 
-import io.ktor.client.HttpClient
+import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
-import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.Headers
@@ -35,7 +34,7 @@ data class FakeBackendConfig(
  *
  * The point is that only the *transport* is fake. Above it there is a genuine HTTP surface
  * — paths, query parameters, status codes, headers — and below it genuine routing and
- * storage. The app talks to it with an ordinary Ktor [HttpClient] and cannot tell the
+ * storage. The app talks to it with an ordinary Ktor client and cannot tell the
  * difference; replacing this with a deployed server means changing a base URL and an
  * engine, nothing else.
  *
@@ -47,31 +46,30 @@ object FakeBackend {
     const val BASE_URL: String = "https://fake.learnmobiledev.local"
 
     /**
+     * The service's transport, and nothing else. A server has no business configuring its
+     * callers' clients — timeouts, retries, logging and content negotiation belong to
+     * whoever does the calling, and are the same decisions against a deployed backend.
+     *
      * @param storage defaults to the documents bundled with this module. Callers are not
      *   expected to pass one — the service owns its data. Tests override it to stand the
      *   backend up on fixtures.
      */
-    fun createClient(
+    fun createEngine(
         languages: LanguageCatalog,
         config: FakeBackendConfig = FakeBackendConfig(),
         storage: ContentStorage = BundledContentStorage(),
-    ): HttpClient {
+    ): HttpClientEngine {
         val router = routing { contentRoutes(storage, languages) }
-        return HttpClient(MockEngine) {
-            engine {
-                addHandler { request ->
-                    if (config.latencyMillis > 0) delay(config.latencyMillis)
+        return MockEngine { request ->
+            if (config.latencyMillis > 0) delay(config.latencyMillis)
 
-                    val response = if (config.unavailable()) {
-                        ApiResponse.serviceUnavailable("the content service is temporarily unavailable")
-                    } else {
-                        router.handle(request.toApiRequest())
-                    }
-
-                    respondWith(response)
-                }
+            val response = if (config.unavailable()) {
+                ApiResponse.serviceUnavailable("the content service is temporarily unavailable")
+            } else {
+                router.handle(request.toApiRequest())
             }
-            install(DefaultRequest) { url(BASE_URL) }
+
+            respondWith(response)
         }
     }
 }
