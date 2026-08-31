@@ -2275,6 +2275,118 @@
       ],
       "correctIndex": 2,
       "explanation": "Zachowanie platform nie ujednolica się przez współdzielenie kodu: uprawnienia, limity pracy w tle i cykle życia nadal się różnią i nadal wymagają obsługi platformowej. Pozostałe trzy to prawdziwe kompromisy — a ten o współdzielonym błędzie jest argumentem za większą liczbą testów, nie mniejszą, bo pojedyncza usterka trafia teraz podwójnie."
+    },
+    {
+      "id": "kt-13",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Modelujesz bloki lekcji: akapit niesie tekst, tabela nagłówki i wiersze, ćwiczenie numer i tekst. enum czy sealed?",
+      "options": [
+        "enum, z danymi trzymanymi obok w mapie",
+        "Zwykła hierarchia klas z otwartą klasą bazową",
+        "enum, z polem nullable na każdy wariant",
+        "sealed, bo dane różnią się przypadek od przypadku"
+      ],
+      "correctIndex": 3,
+      "explanation": "Enum wtłacza każdy wpis w ten sam kształt, więc warianty zwinęłyby się do jednej klasy z polem nullable na przypadek — klasyczny worek opcjonali, w którym niepoprawne kombinacje stają się reprezentowalne, a każdy czytelnik zgaduje, które pola są ustawione. Hierarchia sealed daje każdemu przypadkowi dokładnie te dane, których potrzebuje, i zachowuje wyczerpujący `when`. Otwarta klasa dodatkowo straciłaby wyczerpującość."
+    },
+    {
+      "id": "kt-14",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dolny pasek musi wyrenderować każdą zakładkę. Każda ma etykietę i ikonę. Który konstrukt i co rozstrzyga?",
+      "options": [
+        "enum, bo wpisy mają wspólny kształt, a `entries` iteruje po nich za darmo",
+        "sealed, bo zakładki mogą później zyskać różne dane",
+        "sealed, bo lepiej współpracuje ze Swiftem",
+        "Dowolny — wybór nie robi praktycznej różnicy"
+      ],
+      "correctIndex": 0,
+      "explanation": "Wszystkie zakładki mają identyczny kształt, więc enum pasuje, a rozstrzyga `Tab.entries`: hierarchia sealed nie ma wbudowanego sposobu na wyliczenie podtypów, więc pasek wymagałby ręcznie utrzymywanej listy, o której ktoś w końcu zapomni. Argument o Swifcie jest odwrotny — enum mapuje się na prawdziwy enum Swift, a sealed staje się protokołem i traci wyczerpującość."
+    },
+    {
+      "id": "kt-15",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Review dokłada `else -> throw IllegalStateException()` do `when` po interfejsie sealed, „dla bezpieczeństwa”. Jaki jest skutek?",
+      "options": [
+        "Bezpieczniej — nieoczekiwane podtypy zawodzą teraz głośno",
+        "Znika kontrola kompletności od kompilatora, więc nowy podtyp staje się błędem w czasie działania zamiast błędu kompilacji",
+        "Bez skutku — kompilator ignoruje nieosiągalny else",
+        "Wpływa tylko na wskaźniki pokrycia testami"
+      ],
+      "correctIndex": 1,
+      "explanation": "Bez `else` kompilator wypisuje każde miejsce, które musi obsłużyć nowy podtyp, zamieniając dodanie go w mechaniczną listę zadań. Z `else` kod kompiluje się bez szemrania i zawodzi, gdy użytkownik trafi na tę ścieżkę. Ta gałąź wymienia błąd kompilacji na incydent produkcyjny — odwrotność bezpieczeństwa, mimo jak brzmi."
+    },
+    {
+      "id": "kt-16",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dlaczego nigdy nie zapisywać ani nie przesyłać `ordinal` z enuma?",
+      "options": [
+        "To prywatny szczegół implementacyjny i nie skompiluje się",
+        "Nie jest dostępny w Kotlin/Native",
+        "Zmiana kolejności wpisów po cichu go zmienia, więc zapisane dane zaczynają wskazywać inną stałą",
+        "Nie jest stabilny między wersjami Kotlina"
+      ],
+      "correctIndex": 2,
+      "explanation": "`ordinal` to po prostu indeks deklaracji, więc wstawienie wpisu w środku przesuwa wszystko po nim. Nic nie zawodzi w czasie kompilacji i nic nie rzuca w czasie działania — wcześniej zapisane wartości po cichu znaczą coś innego. `name` jest odporne na zmianę kolejności i dlatego preferencje w tym projekcie zapisują `ThemeMode.Dark`, a nie indeks."
+    },
+    {
+      "id": "kt-17",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Potrzebujesz typu Result niosącego albo wartość typu T, albo błąd. Który konstrukt w ogóle to wyrazi?",
+      "options": [
+        "enum class, z parametrem generycznym",
+        "Dowolny — oba wspierają generyki",
+        "Żaden — to wymaga otwartej klasy",
+        "sealed, bo enumy nie mogą być generyczne"
+      ],
+      "correctIndex": 3,
+      "explanation": "Enumy nie mogą deklarować parametrów typu: wpisy to singletony tworzone przy inicjalizacji klasy, a generyczny singleton nie ma jednego typu, którym mógłby być. Hierarchia sealed nie ma tego ograniczenia, więc `sealed interface Result<out T>` z `Success<T>` i `Failure` to standardowy kształt. To jeden z niewielu przypadków, gdzie wybór jest wymuszony, a nie kwestią gustu."
+    },
+    {
+      "id": "kt-18",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Co `data object` wnosi ponad zwykły `object` w hierarchii sealed?",
+      "options": [
+        "Pozwala na wiele instancji",
+        "Czyni obiekt automatycznie serializowalnym",
+        "Zmniejsza zużycie pamięci",
+        "Generuje czytelne toString() i sensowne equals(), od których zależą logi i wyjście debugowe"
+      ],
+      "correctIndex": 3,
+      "explanation": "Zwykły object dziedziczy domyślne toString(), więc drukuje się jako `RefreshClicked@4f3a2b1c` — bezużytecznie w logu czy na osi czasu intencji. `data object` generuje zamiast tego nazwę klasy oraz equals() oparte na tożsamości. Oba pozostają singletonami; różnią się tylko generowane składowe."
+    },
+    {
+      "id": "kt-19",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Serializacja hierarchii sealed do JSON wymaga więcej konfiguracji niż enum. Dlaczego?",
+      "options": [
+        "Każdy podtyp ma inny kształt, więc JSON potrzebuje dyskryminatora mówiącego, który to",
+        "Typy sealed nie mają stabilnej nazwy do serializacji",
+        "Bo podtypy sealed mogą leżeć w innych modułach",
+        "kotlinx.serialization nie wspiera typów sealed"
+      ],
+      "correctIndex": 0,
+      "explanation": "Enum serializuje się do swojej nazwy i to cała historia — `\"category\": \"mvi\"` jest jednoznaczne. Hierarchia sealed niesie inne pola per podtyp, więc czytelnik potrzebuje dodatkowego pola, skonfigurowanego tu jako `classDiscriminator = \"type\"` z `@SerialName` na każdym podtypie. Ta asymetria to realny argument za enumem wszędzie tam, gdzie format wymiany jest prosty."
+    },
+    {
+      "id": "kt-20",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dlaczego ten projekt używa niemal wszędzie `sealed interface`, a `sealed class` tylko dla UserSyncException?",
+      "options": [
+        "Interfejsy mogą trzymać stan, klasy nie",
+        "sealed class jest przestarzały",
+        "Interfejsy działają wydajniej",
+        "Klasa może implementować wiele interfejsów, ale dziedziczyć z jednej klasy, a UserSyncException musi dziedziczyć z Exception"
+      ],
+      "correctIndex": 3,
+      "explanation": "Ograniczeniem jest pojedyncze dziedziczenie. `sealed interface` pozwala typowi uczestniczyć w wielu hierarchiach i to właśnie umożliwia zagnieżdżenia w stylu `Ui : UsersIntent`. `UserSyncException` nie ma tej swobody: musi dziedziczyć z `Exception`, żeby dało się go rzucić, więc hierarchia sealed musi być klasą. Ani wydajność, ani przestarzałość nie grają tu żadnej roli."
     }
   ]
 }

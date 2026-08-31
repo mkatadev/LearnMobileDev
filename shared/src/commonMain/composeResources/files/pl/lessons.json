@@ -474,8 +474,264 @@
       ]
     },
     {
+      "id": "kotlin-types",
+      "title": "6. Deklaracje typów w Kotlinie: enum a sealed",
+      "summary": "Który konstrukt modeluje którą ideę i dlaczego zły wybór mści się później",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Kotlin ma nietypowo bogaty zestaw deklaracji typów, a najwięcej zamieszania robią dwie, które wyglądają wymiennie: `enum class` i `sealed`. Nie są. Jedna modeluje **skończony zbiór wartości**, druga **skończony zbiór kształtów**."
+        },
+        {
+          "type": "rule",
+          "text": "Zapytaj, co się zmienia. Jeśli zmienia się tylko nazwa — enum. Jeśli dane różnią się przypadek od przypadku — sealed."
+        },
+        {
+          "type": "subheading",
+          "text": "Cała rodzina, w skrócie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Deklaracja",
+            "Modeluje",
+            "Instancje"
+          ],
+          "rows": [
+            [
+              "class",
+              "Rzecz z zachowaniem",
+              "wiele"
+            ],
+            [
+              "data class",
+              "Wartość — equals, hashCode, copy za darmo",
+              "wiele"
+            ],
+            [
+              "value class",
+              "Otypowane opakowanie bez alokacji",
+              "wiele, inlinowane"
+            ],
+            [
+              "object",
+              "Singleton",
+              "dokładnie jedna"
+            ],
+            [
+              "enum class",
+              "Zamknięty zbiór nazwanych stałych",
+              "jedna na wpis"
+            ],
+            [
+              "sealed class / interface",
+              "Zamknięty zbiór podtypów",
+              "dowolnie wiele na podtyp"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "`sealed interface` jest zwykle lepszy niż `sealed class`: klasa może implementować wiele interfejsów, ale dziedziczyć tylko z jednej klasy, więc interfejsy pozwalają na krzyżowe hierarchie. Ten projekt używa niemal wszędzie `sealed interface`, a `sealed class` tylko dla `UserSyncException`, który musi dziedziczyć z `Exception`."
+        },
+        {
+          "type": "subheading",
+          "text": "Różnica sedna"
+        },
+        {
+          "type": "code",
+          "code": "// enum — każdy wpis ma TEN SAM kształt\nenum class QuizCategory { Mvi, Kmp, Coroutines, Rx, /* … */ }\n\n// sealed — każdy podtyp ma WŁASNY kształt\nsealed interface Block {\n    data class Paragraph(val text: String) : Block\n    data class Code(val code: String, val caption: String?) : Block\n    data class Table(val headers: List<String>, val rows: List<List<String>>) : Block\n    data class Exercise(val number: Int, val text: String) : Block\n}",
+          "caption": "Oba pochodzą z tego projektu"
+        },
+        {
+          "type": "paragraph",
+          "text": "`QuizCategory` nie potrzebuje nic poza nazwą, więc enum jest tu dokładnie właściwy. `Block` niesie w każdym przypadku inne dane — akapit ma tekst, tabela ma wiersze — a enum po prostu nie potrafi tego wyrazić."
+        },
+        {
+          "type": "subheading",
+          "text": "Zestawienie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "",
+            "enum class",
+            "sealed"
+          ],
+          "rows": [
+            [
+              "Dane per przypadek",
+              "identyczne dla wszystkich",
+              "różne per podtyp"
+            ],
+            [
+              "Instancje",
+              "jedna na wpis (singletony)",
+              "wiele, chyba że object"
+            ],
+            [
+              "Iteracja po przypadkach",
+              "wbudowana: entries",
+              "ręczna lista albo refleksja"
+            ],
+            [
+              "Generyki",
+              "niewspierane",
+              "wspierane"
+            ],
+            [
+              "Wyczerpujący when",
+              "tak",
+              "tak"
+            ],
+            [
+              "Serializacja",
+              "po nazwie, trywialnie stabilna",
+              "wymaga dyskryminatora typu"
+            ],
+            [
+              "Interop ze Swiftem",
+              "prawdziwy enum Swift",
+              "protokół; wyczerpującość ginie"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Wyczerpującość: cecha wspólna obu"
+        },
+        {
+          "type": "paragraph",
+          "text": "Oba czynią `when` wyczerpującym bez gałęzi `else` i o to właśnie chodzi. Dodanie przypadku psuje kompilację wszędzie tam, gdzie trzeba go obsłużyć — kompilator sam tworzy listę zadań."
+        },
+        {
+          "type": "code",
+          "code": "// Dodanie QuizCategory.Compose zepsuło ten when — czyli dokładnie to, o co chodziło\nval QuizCategory.labelRes: AppString\n    get() = when (this) {\n        QuizCategory.Mvi -> AppString.CategoryMvi\n        QuizCategory.Kmp -> AppString.CategoryKmp\n        // … bez else: kompletności pilnuje kompilator\n    }",
+          "caption": "QuizLabels.kt"
+        },
+        {
+          "type": "rule",
+          "text": "Nigdy nie dodawaj `else` do `when` po enumie albo typie sealed tylko po to, żeby uciszyć kompilator. Ta jedna linia zamienia każdy przyszły błąd kompilacji w cichy błąd w czasie działania."
+        },
+        {
+          "type": "subheading",
+          "text": "Kiedy enum jest właściwy"
+        },
+        {
+          "type": "paragraph",
+          "text": "Enum to nie tylko lista nazw — wpisy mogą nieść właściwości i implementować interfejsy, o ile **każdy** wpis ma ten sam kształt."
+        },
+        {
+          "type": "code",
+          "code": "enum class Tab(val labelRes: AppString, val iconRes: AppString) {\n    Learn(AppString.TabLearn, AppString.TabLearnIcon),\n    Demo(AppString.TabDemo, AppString.TabDemoIcon),\n    Test(AppString.TabTest, AppString.TabTestIcon),\n    Sync(AppString.TabSync, AppString.TabSyncIcon),\n}\n\n// Powód, dla którego to enum: UI iteruje po wszystkich zakładkach\nTab.entries.forEach { entry -> NavigationBarItem(/* … */) }",
+          "caption": "Route.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Rozstrzyga `entries`. Hierarchia sealed nie ma wbudowanego sposobu na wyliczenie podtypów, więc dolny pasek oparty na sealed wymagałby ręcznie utrzymywanej listy — takiej, którą ktoś zapomni zaktualizować."
+        },
+        {
+          "type": "subheading",
+          "text": "Kiedy właściwy jest sealed"
+        },
+        {
+          "type": "code",
+          "code": "sealed interface UiText {\n    data class Raw(val value: String) : UiText                    // komunikat z serwera\n    data class Resource(val id: AppString, val args: List<Any>) : UiText\n}",
+          "caption": "UiText.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Te dwa przypadki niosą zupełnie inne dane. Jako enum zwinęłoby się to do jednej klasy z polem nullable na każdy wariant — klasyczny „worek opcjonali”, w którym niepoprawne kombinacje stają się reprezentowalne, a każdy czytelnik musi zgadywać, które pola są ustawione."
+        },
+        {
+          "type": "rule",
+          "text": "Typy sealed czynią niepoprawne stany niereprezentowalnymi. Enum z pięcioma polami nullable czyni je jedynie mało prawdopodobnymi."
+        },
+        {
+          "type": "subheading",
+          "text": "Zagnieżdżanie: sztuczka stojąca za intencjami MVI"
+        },
+        {
+          "type": "code",
+          "code": "sealed interface UsersIntent {\n\n    sealed interface Ui : UsersIntent {           // czego chce użytkownik\n        data class QueryChanged(val query: String) : Ui\n        data object RefreshClicked : Ui\n    }\n\n    sealed interface Internal : UsersIntent {     // co już się wydarzyło\n        data class LoadSucceeded(val users: List<User>) : Internal\n        data class LoadFailed(val message: UiText) : Internal\n    }\n}",
+          "caption": "UsersContract.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Zagnieżdżona hierarchia sealed pozwala pojedynczemu `when` w reducerze pozostać wyczerpującym, podczas gdy store filtruje po typie pośrednim. Enum nie oferuje niczego podobnego: z natury jest płaski."
+        },
+        {
+          "type": "subheading",
+          "text": "data object i dlaczego ma znaczenie"
+        },
+        {
+          "type": "code",
+          "code": "// Kotlin 1.9 i nowsze\ndata object RefreshClicked : Ui     // toString() = \"RefreshClicked\"\nobject  RefreshClicked : Ui         // toString() = \"RefreshClicked@4f3a2b1c\"\n\n// I dlatego oś czasu w tym projekcie jest w ogóle czytelna"
+        },
+        {
+          "type": "paragraph",
+          "text": "Dla bezstanowego przypadku w hierarchii sealed wybieraj `data object`: generuje sensowne `toString()` i `equals()`. Zależą od tego logi, wyjście debugowe i oś czasu intencji."
+        },
+        {
+          "type": "subheading",
+          "text": "Pułapki warte znajomości"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Wpisy enuma to zachłannie inicjalizowane singletony.** Cały enum ładuje się przy pierwszym dotknięciu któregokolwiek wpisu, więc ciężki inicjalizator płaci nawet kod używający jednej stałej.",
+            "**ordinal nie jest stabilnym identyfikatorem.** Zmiana kolejności wpisów po cichu go zmienia, więc nigdy nie zapisuj ani nie przesyłaj `ordinal` — zapisuj `name`.",
+            "**Enumy nie mogą być generyczne**; typy sealed mogą. `Result<T>` musi być sealed.",
+            "**Podtypy sealed muszą leżeć w tym samym module** (przed Kotlinem 1.5 — w tym samym pakiecie). To właśnie czyni wyczerpującość poprawną.",
+            "**Serializacja się różni.** Enum serializuje się po nazwie; hierarchia sealed potrzebuje dyskryminatora — dlatego DTO deklarują tu `@SerialName(\"paragraph\")` i `classDiscriminator`."
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Serializacja w praktyce"
+        },
+        {
+          "type": "code",
+          "code": "@Serializable\ninternal sealed interface BlockDto {\n    @Serializable @SerialName(\"paragraph\")\n    data class Paragraph(val text: String) : BlockDto\n}\n\nprivate val json = Json { classDiscriminator = \"type\" }\n// {\"type\": \"paragraph\", \"text\": \"…\"}",
+          "caption": "LessonDto.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Odpowiednik enumowy nie potrzebuje żadnej ceremonii — `\"category\": \"mvi\"` to cała historia. Ta asymetria to realny argument za enumem wszędzie tam, gdzie format wymiany jest prosty."
+        },
+        {
+          "type": "subheading",
+          "text": "Decyzja w dziesięć sekund"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Czy każdy przypadek niesie te same dane (albo żadnych)? → **enum**",
+            "Czy kod musi iterować po wszystkich przypadkach? → **enum**",
+            "Czy przypadki niosą różne dane? → **sealed**",
+            "Czy potrzebujesz generyków albo zagnieżdżenia? → **sealed**",
+            "Czy jeden przypadek potrzebuje wielu odrębnych instancji? → **sealed**"
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "A gdy oba by zadziałały — płaski zbiór przypadków z identycznymi danymi — wybierz enum. Jest krótszy, iteruje się za darmo, przeżywa interop ze Swiftem i serializuje się bez konfiguracji."
+        },
+        {
+          "type": "exercise",
+          "number": 17,
+          "text": "Znajdź w projekcie QuizCategory i Block. Dla każdego uzasadnij, dlaczego zamiana na drugi konstrukt pogorszyłaby kod."
+        },
+        {
+          "type": "exercise",
+          "number": 18,
+          "text": "Weź UsersState i spróbuj wyrazić go jako enum stanów ekranu (Loading, Content, Error). Zauważ, co dzieje się z danymi potrzebnymi każdemu stanowi — i dlaczego projekt trzyma zamiast tego data class z właściwościami pochodnymi."
+        }
+      ]
+    },
+    {
       "id": "coroutines",
-      "title": "6. Korutyny i Flow",
+      "title": "7. Korutyny i Flow",
       "summary": "Scope, dispatcher, anulowanie, StateFlow vs SharedFlow, zimne i gorące strumienie",
       "blocks": [
         {
@@ -740,7 +996,7 @@
     },
     {
       "id": "rxjava",
-      "title": "7. RxJava vs Kotlin Flow",
+      "title": "8. RxJava vs Kotlin Flow",
       "summary": "Słownik pojęć, migracja i dlaczego Flow wygrał na Androidzie",
       "blocks": [
         {
@@ -927,7 +1183,7 @@
     },
     {
       "id": "solid",
-      "title": "8. SOLID w praktyce",
+      "title": "9. SOLID w praktyce",
       "summary": "Pięć zasad na przykładach z tego projektu — i co się psuje bez nich",
       "blocks": [
         {
@@ -1087,7 +1343,7 @@
     },
     {
       "id": "di",
-      "title": "9. Dependency Injection (Koin)",
+      "title": "10. Dependency Injection (Koin)",
       "summary": "Trzy moduły = trzy warstwy, scope ViewModelu",
       "blocks": [
         {
@@ -1120,7 +1376,7 @@
     },
     {
       "id": "kmp",
-      "title": "10. Kotlin Multiplatform",
+      "title": "11. Kotlin Multiplatform",
       "summary": "Source sety, targety, model pamięci i ile warto współdzielić",
       "blocks": [
         {
@@ -1316,7 +1572,7 @@
     },
     {
       "id": "platform-code",
-      "title": "11. Kod platformowy: port czy expect/actual?",
+      "title": "12. Kod platformowy: port czy expect/actual?",
       "summary": "Dwa sposoby na abstrakcję nad platformą i jak wybrać właściwy",
       "blocks": [
         {
@@ -1472,7 +1728,7 @@
     },
     {
       "id": "testing",
-      "title": "12. Testowanie w tym projekcie",
+      "title": "13. Testowanie w tym projekcie",
       "summary": "Reducer bez korutyn, ViewModel na czasie wirtualnym",
       "blocks": [
         {
@@ -1509,7 +1765,7 @@
     },
     {
       "id": "testing-kinds",
-      "title": "13. Rodzaje testów w projekcie mobilnym",
+      "title": "14. Rodzaje testów w projekcie mobilnym",
       "summary": "Unit, smoke, golden, Espresso/Compose UI, XCTest i XCUITest",
       "blocks": [
         {
@@ -1734,7 +1990,7 @@
     },
     {
       "id": "cheat-sheet",
-      "title": "14. Ściąga",
+      "title": "15. Ściąga",
       "summary": "Zasady, których warto pilnować na review",
       "blocks": [
         {

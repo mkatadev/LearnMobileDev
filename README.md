@@ -21,9 +21,9 @@ Four tabs, each one a separate MVI feature built on the same core.
 
 | Tab | What it does |
 |---|---|
-| 📘 **Learn** | 14 lessons: MVI, MVP/MVVM, Clean Architecture, coroutines & Flow, RxJava, SOLID, DI, Kotlin Multiplatform, testing |
+| 📘 **Learn** | 15 lessons: MVI, MVP/MVVM, Clean Architecture, Kotlin type declarations, coroutines & Flow, RxJava, SOLID, DI, Kotlin Multiplatform, testing |
 | ⚙ **Demo** | A live users screen with debounce, request cancellation, optimistic updates with rollback and a time-travel debugger |
-| ✓ **Quiz** | 162 senior-level questions across 12 categories, each answer followed by an explanation |
+| ✓ **Quiz** | 170 senior-level questions across 12 categories, each answer followed by an explanation |
 | ⇄ **Sync** | A concurrency lab: 7 deterministic scenarios with live PASS/FAIL results |
 
 Available in **English and Polish**, switchable inside the app.
