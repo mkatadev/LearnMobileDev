@@ -2275,6 +2275,118 @@
       ],
       "correctIndex": 2,
       "explanation": "Platform behaviour is not unified by sharing code: permissions, background limits and lifecycles still differ and still need platform handling. The other three are genuine trade-offs — and the shared-bug one is an argument for more tests, not fewer, since a single defect now ships twice."
+    },
+    {
+      "id": "kt-13",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "You are modelling the blocks of a lesson: a paragraph carries text, a table carries headers and rows, an exercise carries a number and text. enum or sealed?",
+      "options": [
+        "enum, with the data held in a Map on the side",
+        "A plain class hierarchy with an open base class",
+        "enum, with a nullable field for every variant",
+        "sealed, because the data differs from case to case"
+      ],
+      "correctIndex": 3,
+      "explanation": "An enum forces every entry into the same shape, so the variants would collapse into one class with a nullable field per case — the classic bag of optionals, where invalid combinations become representable and every reader guesses which fields are set. A sealed hierarchy gives each case exactly the data it needs and keeps `when` exhaustive. An open class would additionally lose exhaustiveness."
+    },
+    {
+      "id": "kt-14",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "A bottom bar has to render every tab. Each tab has a label and an icon. Which construct, and what settles it?",
+      "options": [
+        "enum, because entries share a shape and `entries` iterates them for free",
+        "sealed, because tabs may gain different data later",
+        "sealed, because it interops better with Swift",
+        "Either — the choice makes no practical difference"
+      ],
+      "correctIndex": 0,
+      "explanation": "All tabs have identical shape, so an enum fits, and `Tab.entries` is what settles it: a sealed hierarchy has no built-in way to enumerate its subtypes, so the bar would need a hand-maintained list that someone eventually forgets to update. The Swift claim is backwards — an enum maps to a real Swift enum, while sealed becomes a protocol and loses exhaustiveness."
+    },
+    {
+      "id": "kt-15",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "A code review adds `else -> throw IllegalStateException()` to a `when` over a sealed interface, to “be safe”. What is the effect?",
+      "options": [
+        "It is safer — unexpected subtypes now fail loudly",
+        "It removes the compiler's completeness check, so a new subtype becomes a runtime failure instead of a build error",
+        "No effect — the compiler ignores an unreachable else",
+        "It only affects code coverage numbers"
+      ],
+      "correctIndex": 1,
+      "explanation": "Without `else` the compiler lists every place that has to handle a new subtype, turning the addition into a mechanical to-do list. With `else` the code compiles happily and fails when a user hits that path. The branch trades a build error for a production incident — the opposite of safe, despite how it reads."
+    },
+    {
+      "id": "kt-16",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Why should an enum's `ordinal` never be persisted or sent over the wire?",
+      "options": [
+        "It is a private implementation detail and will not compile",
+        "It is not available in Kotlin/Native",
+        "Reordering entries silently changes it, so stored data starts pointing at a different constant",
+        "It is not stable across Kotlin versions"
+      ],
+      "correctIndex": 2,
+      "explanation": "`ordinal` is simply the declaration index, so inserting an entry in the middle shifts everything after it. Nothing fails at compile time and nothing throws at runtime — previously stored values quietly mean something else. `name` is stable against reordering, which is why the preferences in this project store `ThemeMode.Dark` rather than an index."
+    },
+    {
+      "id": "kt-17",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "You need a Result type carrying either a value of type T or an error. Which construct can express this at all?",
+      "options": [
+        "enum class, with a generic parameter",
+        "Either — both support generics",
+        "Neither — it requires an open class",
+        "sealed, because enums cannot be generic"
+      ],
+      "correctIndex": 3,
+      "explanation": "Enums cannot declare type parameters: entries are singletons created at class-initialisation time, and a generic singleton has no single type to be. A sealed hierarchy has no such limit, so `sealed interface Result<out T>` with `Success<T>` and `Failure` is the standard shape. This is one of the few places where the choice is forced rather than a matter of taste."
+    },
+    {
+      "id": "kt-18",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What does `data object` add over a plain `object` inside a sealed hierarchy?",
+      "options": [
+        "It permits multiple instances",
+        "It makes the object serializable automatically",
+        "It reduces memory usage",
+        "It generates a readable toString() and a proper equals(), which debug output and logs depend on"
+      ],
+      "correctIndex": 3,
+      "explanation": "A plain object inherits the default toString(), so it prints as `RefreshClicked@4f3a2b1c` — useless in a log or on an intent timeline. `data object` generates the class name instead, and an equals() based on identity rather than the default reference check. Both objects remain singletons; only the generated members differ."
+    },
+    {
+      "id": "kt-19",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Serializing a sealed hierarchy to JSON requires more setup than an enum. Why?",
+      "options": [
+        "Each subtype has a different shape, so the JSON needs a discriminator to say which one it is",
+        "Sealed types have no stable name to serialize",
+        "Because sealed subtypes may live in other modules",
+        "Sealed types are not supported by kotlinx.serialization"
+      ],
+      "correctIndex": 0,
+      "explanation": "An enum serialises to its name and that is the whole story — `\"category\": \"mvi\"` is unambiguous. A sealed hierarchy carries different fields per subtype, so the reader needs an extra field, configured here as `classDiscriminator = \"type\"` with `@SerialName` on each subtype. That asymmetry is a genuine argument for an enum whenever the wire format is simple."
+    },
+    {
+      "id": "kt-20",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Why does this project use `sealed interface` almost everywhere and `sealed class` only for UserSyncException?",
+      "options": [
+        "Interfaces can hold state, classes cannot",
+        "sealed class is deprecated",
+        "Interfaces perform better",
+        "A class can implement several interfaces but extend only one class, and UserSyncException must extend Exception"
+      ],
+      "correctIndex": 3,
+      "explanation": "Single inheritance is the constraint. `sealed interface` lets a type participate in several hierarchies, which is what makes nesting like `Ui : UsersIntent` work. `UserSyncException` has no such freedom: it must extend `Exception` to be throwable, so the sealed hierarchy has to be a class. Neither performance nor deprecation plays any part."
     }
   ]
 }
