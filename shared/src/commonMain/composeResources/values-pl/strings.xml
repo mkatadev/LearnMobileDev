@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="action_back">← Wróć</string>
+    <string name="action_cancel">Anuluj</string>
     <string name="action_clear">Wyczyść</string>
     <string name="action_done">Gotowe</string>
     <string name="action_hide">Ukryj</string>
     <string name="action_reset">Reset</string>
     <string name="action_retry">Spróbuj ponownie</string>
+    <string name="action_save">Zapisz</string>
     <string name="app_name">Learn Mobile Development</string>
     <string name="category_android">Android</string>
     <string name="category_clean">Clean</string>
@@ -30,6 +32,8 @@
     <string name="error_scenario_failed">Nie udało się uruchomić scenariusza</string>
     <string name="error_scenarios_unavailable">Nie udało się wczytać scenariuszy</string>
     <string name="error_unknown">Wystąpił nieoczekiwany błąd</string>
+    <string name="error_user_invalid">Serwer odrzucił te dane</string>
+    <string name="error_user_not_found">Ten użytkownik już nie istnieje</string>
     <string name="language_english">EN</string>
     <string name="language_name_english">English</string>
     <string name="language_name_polish">Polski</string>
@@ -114,9 +118,16 @@
     <string name="theme_dark">☾</string>
     <string name="theme_light">☀</string>
     <string name="theme_toggle_description">Zmień motyw</string>
+    <string name="user_details_edit">Edytuj</string>
     <string name="user_details_favorite">★ w ulubionych</string>
     <string name="user_details_not_favorite">☆ poza ulubionymi</string>
     <string name="user_details_not_found">Nie znaleziono użytkownika %1$s</string>
+    <string name="user_edit_email">E-mail</string>
+    <string name="user_edit_name">Imię i nazwisko</string>
+    <string name="user_edit_role">Rola</string>
+    <string name="user_edit_saved">Zapisano zmiany</string>
+    <string name="user_edit_saving">Zapisuję…</string>
+    <string name="user_edit_title">Edycja użytkownika</string>
     <string name="users_empty">Brak użytkowników</string>
     <string name="users_empty_query">Nic nie pasuje do \"%1$s\"</string>
     <string name="users_favorite_no">☆ dodaj</string>

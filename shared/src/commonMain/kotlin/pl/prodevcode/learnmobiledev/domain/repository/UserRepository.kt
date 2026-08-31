@@ -15,6 +15,15 @@ interface UserRepository {
 
     /** May throw [UserSyncException] — used to demonstrate optimistic-update rollback. */
     suspend fun setFavorite(userId: String, favorite: Boolean): Boolean
+
+    /**
+     * Persists the editable fields and returns the user **as the server stored it**.
+     *
+     * The answer is the new truth, not the values that were sent: a backend is free to
+     * trim, normalize or reject them, and a client that keeps its own copy instead ends
+     * up showing something no server ever agreed to.
+     */
+    suspend fun updateUser(userId: String, name: String, email: String, role: String): User
 }
 
 /**
@@ -32,4 +41,12 @@ sealed class UserSyncException(message: String) : Exception(message) {
     /** The backend refused to persist the favorite flag. */
     class FavoriteRejected(userId: String) :
         UserSyncException("Server rejected favorite update for user=$userId")
+
+    /** The backend understood the edit and refused the values (HTTP 422). */
+    class InvalidUser(userId: String) :
+        UserSyncException("Server rejected the edited fields for user=$userId")
+
+    /** The user is gone — edited or favorited by someone after the list was loaded. */
+    class UserNotFound(userId: String) :
+        UserSyncException("Server does not know user=$userId")
 }

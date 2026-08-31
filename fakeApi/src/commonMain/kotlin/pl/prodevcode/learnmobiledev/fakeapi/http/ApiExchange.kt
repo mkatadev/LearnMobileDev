@@ -11,7 +11,13 @@ data class ApiRequest(
     val method: String,
     val path: String,
     val query: Map<String, String> = emptyMap(),
-)
+    val headers: Map<String, String> = emptyMap(),
+    val body: String = "",
+) {
+    /** Header lookup is case-insensitive on the wire, so it must be here too. */
+    fun header(name: String): String? =
+        headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+}
 
 /**
  * A route match: the request plus the values captured from the path template.
@@ -42,7 +48,15 @@ data class ApiResponse(
         fun ok(body: String, headers: Map<String, String> = emptyMap()): ApiResponse =
             ApiResponse(status = 200, body = body, headers = headers)
 
+        fun badRequest(message: String): ApiResponse = error(400, message)
+
         fun notFound(message: String): ApiResponse = error(404, message)
+
+        /** The request was understood, but the server refuses to apply it. */
+        fun conflict(message: String): ApiResponse = error(409, message)
+
+        /** Well-formed, but the values are not ones the server will store. */
+        fun unprocessable(message: String): ApiResponse = error(422, message)
 
         fun serviceUnavailable(message: String): ApiResponse = error(503, message)
 

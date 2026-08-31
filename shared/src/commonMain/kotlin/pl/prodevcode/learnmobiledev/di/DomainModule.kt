@@ -12,6 +12,7 @@ import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetFavoriteUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetAppLanguageUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetThemeModeUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.UpdateUserUseCase
 
 /**
  * The domain layer: use cases are stateless, so they are registered as `factory`.
@@ -23,6 +24,7 @@ import pl.prodevcode.learnmobiledev.domain.usecase.SetThemeModeUseCase
 val domainModule: Module = module {
     factory { SearchUsersUseCase(get()) }
     factory { SetFavoriteUseCase(get()) }
+    factory { UpdateUserUseCase(get()) }
     factory { GetLessonsUseCase(get()) }
     factory { GetConcurrencyScenariosUseCase(get()) }
     factory { RunConcurrencyScenarioUseCase(get()) }

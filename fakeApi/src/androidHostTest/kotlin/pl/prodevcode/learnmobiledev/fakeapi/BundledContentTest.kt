@@ -53,4 +53,18 @@ class BundledContentTest {
             )
         }
     }
+
+    /**
+     * The user table is not localized — names and email addresses read the same in every
+     * language — so it sits beside the language folders rather than inside them.
+     */
+    @Test
+    fun `the user table ships with the service`() {
+        val table = File(root, "users.json")
+
+        assertTrue(
+            table.isFile && table.length() > 0,
+            "the user table is missing from the bundle: $table",
+        )
+    }
 }

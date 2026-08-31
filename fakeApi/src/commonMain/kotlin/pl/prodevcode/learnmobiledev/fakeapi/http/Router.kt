@@ -47,6 +47,15 @@ class RoutingBuilder internal constructor() {
     fun get(template: String, handler: suspend (ApiCall) -> ApiResponse) {
         routes += Route("GET", template, handler)
     }
+
+    /**
+     * `PUT` rather than `POST` for the favorite flag: the client states the value it wants
+     * and repeating the call changes nothing, which is what makes a retry after a timeout
+     * safe.
+     */
+    fun put(template: String, handler: suspend (ApiCall) -> ApiResponse) {
+        routes += Route("PUT", template, handler)
+    }
 }
 
 /**

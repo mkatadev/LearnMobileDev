@@ -121,6 +121,87 @@ class UsersReducerTest {
         assertTrue(result.users.first().isFavorite)
     }
 
+
+    @Test
+    fun `EditClicked copies the row into a draft`() {
+        val result = reduce(UsersState(users = listOf(anna, bartek)), UsersIntent.Ui.EditClicked("u-2"))
+
+        assertEquals(UserEditor.of(bartek), result.editor)
+    }
+
+    @Test
+    fun `EditClicked on an unknown user changes nothing`() {
+        val state = UsersState(users = listOf(anna))
+
+        assertEquals(state, reduce(state, UsersIntent.Ui.EditClicked("u-9")))
+    }
+
+    /** Editing the draft must leave the list alone until the server has agreed. */
+    @Test
+    fun `typing changes the draft and not the list`() {
+        val open = reduce(UsersState(users = listOf(anna)), UsersIntent.Ui.EditClicked("u-1"))
+
+        val result = reduce(open, UsersIntent.Ui.EditNameChanged("Anna Nowak"))
+
+        assertEquals("Anna Nowak", result.editor?.name)
+        assertEquals(anna, result.users.first())
+    }
+
+    @Test
+    fun `a cancelled edit is discarded`() {
+        val open = reduce(UsersState(users = listOf(anna)), UsersIntent.Ui.EditClicked("u-1"))
+        val typed = reduce(open, UsersIntent.Ui.EditRoleChanged("Tech Lead"))
+
+        val result = reduce(typed, UsersIntent.Ui.EditCancelled)
+
+        assertNull(result.editor)
+        assertEquals(anna, result.users.first())
+    }
+
+    @Test
+    fun `an empty field blocks the save`() {
+        val open = reduce(UsersState(users = listOf(anna)), UsersIntent.Ui.EditClicked("u-1"))
+
+        val result = reduce(open, UsersIntent.Ui.EditNameChanged("  "))
+
+        assertFalse(result.editor!!.canSave)
+    }
+
+    @Test
+    fun `a save in flight blocks another one`() {
+        val open = reduce(UsersState(users = listOf(anna)), UsersIntent.Ui.EditClicked("u-1"))
+
+        val result = reduce(open, UsersIntent.Internal.EditSaveStarted)
+
+        assertTrue(result.editor!!.isSaving)
+        assertFalse(result.editor!!.canSave)
+    }
+
+    /** The list adopts the stored row, which need not equal what was typed. */
+    @Test
+    fun `a saved edit closes the editor and replaces the row`() {
+        val open = reduce(UsersState(users = listOf(anna, bartek)), UsersIntent.Ui.EditClicked("u-1"))
+        val stored = anna.copy(name = "Anna Nowak", role = "Tech Lead")
+
+        val result = reduce(open, UsersIntent.Internal.EditSaveSucceeded(stored))
+
+        assertNull(result.editor)
+        assertEquals(listOf(stored, bartek), result.users)
+    }
+
+    /** A form that empties itself on failure is a form people retype. */
+    @Test
+    fun `a rejected edit keeps the editor open with the typed values`() {
+        val open = reduce(UsersState(users = listOf(anna)), UsersIntent.Ui.EditClicked("u-1"))
+        val typed = reduce(open, UsersIntent.Ui.EditEmailChanged("nope"))
+        val saving = reduce(typed, UsersIntent.Internal.EditSaveStarted)
+
+        val result = reduce(saving, UsersIntent.Internal.EditSaveFailed(UiText.Raw("rejected")))
+
+        assertEquals("nope", result.editor?.email)
+        assertFalse(result.editor!!.isSaving)
+    }
+
     @Test
     fun `the reducer is deterministic`() {
         val state = UsersState(users = listOf(anna, bartek))

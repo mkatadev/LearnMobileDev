@@ -17,8 +17,11 @@ import pl.prodevcode.learnmobiledev.fakeapi.resources.Res
 @OptIn(ExperimentalResourceApi::class)
 class BundledContentStorage : ContentStorage {
 
-    override suspend fun read(language: String, resource: String): String? = try {
-        Res.readBytes("files/$language/$resource.json").decodeToString()
+    override suspend fun read(language: String, resource: String): String? =
+        readFile("files/$language/$resource.json")
+
+    internal suspend fun readFile(path: String): String? = try {
+        Res.readBytes(path).decodeToString()
     } catch (_: Exception) {
         null
     }

@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
+    alias(libs.plugins.kotlinSerialization)
     // Only for the resource loader: the content documents are this service's database, and
     // Compose Resources is the one API that reads bundled files on both Android and iOS
     // without an expect/actual of its own. Reading a bundled file needs a Context on
@@ -49,6 +50,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serializationJson)
             implementation(libs.compose.runtime)
             implementation(libs.compose.components.resources)
             api(libs.ktor.client.core)

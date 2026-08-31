@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "id": "u-1",
+      "name": "Anna Kowalska",
+      "email": "anna@prodevcode.pl",
+      "role": "Android Developer"
+    },
+    {
+      "id": "u-2",
+      "name": "Bartek Nowak",
+      "email": "bartek@prodevcode.pl",
+      "role": "iOS Developer"
+    },
+    {
+      "id": "u-3",
+      "name": "Celina Wójcik",
+      "email": "celina@prodevcode.pl",
+      "role": "Tech Lead"
+    },
+    {
+      "id": "u-4",
+      "name": "Damian Zieliński",
+      "email": "damian@prodevcode.pl",
+      "role": "QA Engineer"
+    },
+    {
+      "id": "u-5",
+      "name": "Ewa Lewandowska",
+      "email": "ewa@prodevcode.pl",
+      "role": "Product Owner"
+    },
+    {
+      "id": "u-6",
+      "name": "Filip Mazur",
+      "email": "filip@prodevcode.pl",
+      "role": "Backend Developer"
+    },
+    {
+      "id": "u-7",
+      "name": "Gosia Krawczyk",
+      "email": "gosia@prodevcode.pl",
+      "role": "UX Designer"
+    }
+  ]
+}

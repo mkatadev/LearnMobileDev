@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertSame
 import org.koin.core.context.stopKoin
 import org.koin.dsl.koinApplication
-import pl.prodevcode.learnmobiledev.data.repository.InMemoryUserRepository
+import pl.prodevcode.learnmobiledev.data.repository.ApiUserRepository
 import pl.prodevcode.learnmobiledev.domain.repository.NetworkFailureSwitch
 import pl.prodevcode.learnmobiledev.domain.repository.UserRepository
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
@@ -34,7 +34,7 @@ class KoinModulesTest {
         val repository = koin.get<UserRepository>()
         val failureSwitch = koin.get<NetworkFailureSwitch>()
 
-        assertSame(repository as InMemoryUserRepository, failureSwitch)
+        assertSame(repository as ApiUserRepository, failureSwitch)
 
         stopKoin()
     }

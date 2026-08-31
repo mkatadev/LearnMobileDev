@@ -19,15 +19,16 @@ review; where a test exists, it is named.
 | Commit messages, this file, README | **English** | Same reason |
 | UI strings | **String resources only** | `composeResources/values/strings.xml`, `values-pl/strings.xml` |
 | Course content (lessons, quiz, scenarios) | **Served by `:fakeApi`** | `fakeApi/…/composeResources/files/<lang>/` |
+| Demo users (fictional personal data) | **Served by `:fakeApi`** | `fakeApi/…/composeResources/files/users.json` |
 
 Two tests enforce this rather than trusting discipline: `CodeLanguagePolicyTest` rejects
 Polish characters and hard-coded `Text("…")` literals in Kotlin sources, and
 `StringResourcesTest` rejects an incomplete set of translations.
 
 **No Polish anywhere in `.kt` files.** Not in comments, not in KDoc, not in test names,
-not in string literals. The only tolerated exception is fictional personal data in demo
-fixtures (`InMemoryUserRepository` contains names such as `Celina Wójcik`) — that is data,
-not code.
+not in string literals — with no exceptions. Fictional personal data such as
+`Celina Wójcik` is data, not code, and lives in the user table the fake backend serves
+(`fakeApi/…/composeResources/files/users.json`).
 
 Quick audit:
 
@@ -137,24 +138,26 @@ Consequences worth knowing:
 - A key with no resource behind it throws when that screen opens. That is why the test is
   not optional.
 
-### Course content
+### Course content and demo users
 
-Lessons, questions and scenarios are **not** app resources. They are the content service's
-data and live in `:fakeApi`, one directory per language:
+Lessons, questions, scenarios and the user directory are **not** app resources. They are
+the backend's data and live in `:fakeApi`:
 
 ```
 fakeApi/src/commonMain/composeResources/files/
 ├─ en/{lessons,questions,scenarios}.json   <- default
-└─ pl/{lessons,questions,scenarios}.json
+├─ pl/{lessons,questions,scenarios}.json
+└─ users.json                              <- the user table, not localized
 ```
 
 Nothing above the HTTP boundary can reach them: the app has no path to another module's
-resources and must go through `GET /api/v1/content/{resource}?lang=xx`. Language negotiation
-happens on the server (`LanguageCatalog`), which answers with the translation it has and
-reports it in `Content-Language`; an unsupported language falls back to `en`.
+resources and must go through `GET /api/v1/content/{resource}?lang=xx` or
+`GET /api/v1/users?q=`. Language negotiation happens on the server (`LanguageCatalog`),
+which answers with the translation it has and reports it in `Content-Language`; an
+unsupported language falls back to `en`.
 
 `BundledContentTest` guards the data set — every published resource, in every served
-language, and nothing the service does not publish.
+language, the user table, and nothing the service does not publish.
 
 ### In-app language switching
 

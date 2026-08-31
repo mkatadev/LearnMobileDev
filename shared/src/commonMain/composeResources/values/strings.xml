@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="action_back">← Back</string>
+    <string name="action_cancel">Cancel</string>
     <string name="action_clear">Clear</string>
     <string name="action_done">Done</string>
     <string name="action_hide">Hide</string>
     <string name="action_reset">Reset</string>
     <string name="action_retry">Try again</string>
+    <string name="action_save">Save</string>
     <string name="app_name">Learn Mobile Development</string>
     <string name="category_android">Android</string>
     <string name="category_clean">Clean</string>
@@ -30,6 +32,8 @@
     <string name="error_scenario_failed">Could not run the scenario</string>
     <string name="error_scenarios_unavailable">Could not load the scenarios</string>
     <string name="error_unknown">An unexpected error occurred</string>
+    <string name="error_user_invalid">The server rejected these details</string>
+    <string name="error_user_not_found">That user no longer exists</string>
     <string name="language_english">EN</string>
     <string name="language_name_english">English</string>
     <string name="language_name_polish">Polski</string>
@@ -114,9 +118,16 @@
     <string name="theme_dark">☾</string>
     <string name="theme_light">☀</string>
     <string name="theme_toggle_description">Change theme</string>
+    <string name="user_details_edit">Edit</string>
     <string name="user_details_favorite">★ in favorites</string>
     <string name="user_details_not_favorite">☆ not a favorite</string>
     <string name="user_details_not_found">User %1$s not found</string>
+    <string name="user_edit_email">Email</string>
+    <string name="user_edit_name">Name</string>
+    <string name="user_edit_role">Role</string>
+    <string name="user_edit_saved">Changes saved</string>
+    <string name="user_edit_saving">Saving…</string>
+    <string name="user_edit_title">Edit user</string>
     <string name="users_empty">No users</string>
     <string name="users_empty_query">Nothing matches \"%1$s\"</string>
     <string name="users_favorite_no">☆ add</string>
