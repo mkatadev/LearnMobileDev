@@ -16,7 +16,6 @@ val LearnReducer = Reducer<LearnState, LearnIntent> { state, intent ->
 
         // Clearing the lessons matters: without it the screen would keep rendering the
         // previous locale until the new content arrives.
-        is LearnIntent.Ui.ContentInvalidated -> state.copy(lessons = emptyList(), error = null)
 
         is LearnIntent.Ui.LessonClicked -> state.copy(
             openLessonId = if (state.openLessonId == intent.lessonId) null else intent.lessonId,

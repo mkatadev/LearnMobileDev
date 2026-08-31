@@ -35,9 +35,6 @@ sealed interface LearnIntent : MviIntent {
     sealed interface Ui : LearnIntent {
         data object ScreenOpened : Ui
         data object RetryClicked : Ui
-
-        /** The content language changed, so anything cached is now in the wrong locale. */
-        data object ContentInvalidated : Ui
         data class LessonClicked(val lessonId: String) : Ui
         data class LessonCompletionToggled(val lessonId: String) : Ui
         data object ProgressReset : Ui

@@ -6,7 +6,6 @@ import pl.prodevcode.learnmobiledev.domain.usecase.GetAppLanguageUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetConcurrencyScenariosUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetLessonsUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetQuizQuestionsUseCase
-import pl.prodevcode.learnmobiledev.domain.usecase.GetStringCatalogUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetThemeModeUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.RunConcurrencyScenarioUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
@@ -32,5 +31,4 @@ val domainModule: Module = module {
     factory { SetThemeModeUseCase(get()) }
     factory { GetAppLanguageUseCase(get()) }
     factory { SetAppLanguageUseCase(get()) }
-    factory { GetStringCatalogUseCase(get()) }
 }

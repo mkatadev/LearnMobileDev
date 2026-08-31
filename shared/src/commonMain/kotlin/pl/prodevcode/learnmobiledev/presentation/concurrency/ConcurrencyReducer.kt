@@ -15,12 +15,6 @@ val ConcurrencyReducer = Reducer<ConcurrencyState, ConcurrencyIntent> { state, i
         is ConcurrencyIntent.Ui.ScreenOpened -> state
         is ConcurrencyIntent.Ui.RetryClicked -> state
 
-        // Results are dropped too — their expectations were phrased in the old language.
-        is ConcurrencyIntent.Ui.ContentInvalidated -> state.copy(
-            scenarios = emptyList(),
-            results = emptyMap(),
-            error = null,
-        )
         is ConcurrencyIntent.Ui.RunAllClicked -> state
 
         is ConcurrencyIntent.Ui.ScenarioClicked -> state.copy(

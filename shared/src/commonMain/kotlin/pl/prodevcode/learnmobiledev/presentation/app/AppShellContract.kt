@@ -3,7 +3,6 @@ package pl.prodevcode.learnmobiledev.presentation.app
 import pl.prodevcode.learnmobiledev.core.mvi.MviEffect
 import pl.prodevcode.learnmobiledev.core.mvi.MviIntent
 import pl.prodevcode.learnmobiledev.core.mvi.MviState
-import pl.prodevcode.learnmobiledev.core.ui.StringCatalog
 import pl.prodevcode.learnmobiledev.domain.model.AppLanguage
 import pl.prodevcode.learnmobiledev.domain.model.ThemeMode
 
@@ -24,15 +23,23 @@ data class AppShellState(
     val isThemeLoaded: Boolean = false,
     val language: AppLanguage = AppLanguage.DEFAULT,
     /**
-     * Bumped whenever the effective content language changes. Screens use it as a key to
-     * reload their content — the cached JSON belongs to the previous locale.
+     * The language chosen but not yet in effect.
+     *
+     * Resources follow the platform locale, which only changes at launch, so a switch
+     * cannot be applied to the running app. Holding the pending choice in state is what
+     * lets the UI explain that rather than appear to have ignored the tap.
      */
-    val contentRevision: Int = 0,
-    /** UI strings for the active language; empty until the catalogue is loaded. */
-    val strings: StringCatalog = StringCatalog.EMPTY,
-    /** Gates the first render, so no screen flashes untranslated keys. */
-    val areStringsLoaded: Boolean = false,
-) : MviState
+    val pendingLanguage: AppLanguage? = null,
+    /** Whether the language picker is on screen. */
+    val isLanguagePickerVisible: Boolean = false,
+) : MviState {
+
+    /**
+     * What the picker should show as selected: the scheduled language if there is one,
+     * otherwise the one in effect.
+     */
+    val selectedLanguage: AppLanguage get() = pendingLanguage ?: language
+}
 
 sealed interface AppShellIntent : MviIntent {
 
@@ -42,25 +49,31 @@ sealed interface AppShellIntent : MviIntent {
         /** Switches between the light and dark palettes. */
         data object ThemeToggled : Ui
 
-        /** Switches between English and Polish. */
-        data object LanguageToggled : Ui
+        /** Opens the language picker. */
+        data object LanguagePickerOpened : Ui
+
+        /** Picks a language. It applies on the next launch, not now. */
+        data class LanguageSelected(val language: AppLanguage) : Ui
+
+        /** Closes the picker. Any scheduled choice stays scheduled. */
+        data object LanguagePickerDismissed : Ui
     }
 
     sealed interface Internal : AppShellIntent {
         /** Preference read from persistent storage at startup. */
         data class ThemeRestored(val mode: ThemeMode) : Internal
 
-        /**
-         * The content language was applied. [contentChanged] is false when the effective
-         * language stayed the same, so screens do not reload for nothing.
-         */
-        data class LanguageApplied(
-            val language: AppLanguage,
-            val contentChanged: Boolean,
-        ) : Internal
+        /** The language in effect for this launch, read from the platform at startup. */
+        data class LanguageRestored(val language: AppLanguage) : Internal
 
-        /** The string catalogue finished loading for the active language. */
-        data class StringsLoaded(val strings: StringCatalog) : Internal
+        /**
+         * The choice was recorded and will apply on the next launch.
+         *
+         * Separate from [LanguageRestored] because the two mean opposite things: one is
+         * what the app *is* showing, the other what it *will* show.
+         */
+        data class LanguageScheduled(val language: AppLanguage) : Internal
+
     }
 }
 

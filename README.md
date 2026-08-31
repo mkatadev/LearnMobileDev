@@ -73,7 +73,7 @@ Dependencies point inward: **presentation → domain ← data**.
 ```
 shared/src/commonMain/kotlin/pl/prodevcode/learnmobiledev/
 ├─ core/mvi/        MVI framework: state, intents, reducer, store, timeline
-├─ core/ui/         UiText and the string catalogue
+├─ core/ui/         AppString and UiText — text as a key, not a resolved string
 ├─ domain/
 │  ├─ model/        plain Kotlin, no framework annotations
 │  ├─ repository/   ports (interfaces) + domain exceptions
@@ -110,7 +110,8 @@ embedded server, because a real server would not run on iOS.
 The content documents live in `:fakeApi`, not in the app. They are the service's database,
 and keeping them there means nothing above the HTTP boundary can reach them: the app has no
 path to another module's resources and must go through the API, exactly as it would against
-a real server. Only `strings.json` stays in `:shared` — UI text is the app's own.
+a real server. UI strings are a separate matter: they stay in `:shared` as ordinary string
+resources, because they are the app's own text rather than content served to it.
 
 Language negotiation lives on the server, where it belongs: the client states a preference,
 the backend answers with the translation it actually has and reports it in
@@ -144,12 +145,14 @@ time travel possible at all.
 - **Errors carry a type, not a message.** `error.message` is technical English for logs;
   the presentation layer maps the exception *type* to a localized string. State holds
   `UiText`, never `String`.
-- **Content is data.** Lessons, questions, scenarios and UI strings are JSON assets under
-  `files/<lang>/`, validated by tests rather than trusted.
-- **One localization mechanism.** UI strings do not use `values-pl/`, because Compose
-  Resources resolves those from the *system* locale and that cannot be overridden — an
-  in-app switch would change the course text but leave the tab bar behind.
-- **Caches are keyed by language**, so switching locale cannot serve stale content.
+- **Content is data.** Lessons, questions and scenarios are JSON documents owned by the
+  content service, validated by tests rather than trusted.
+- **UI strings are ordinary string resources** (`values/`, `values-pl/`), resolved through
+  the `AppString` key enum. Because Compose Resources follows the *system* locale and 1.11
+  offers no supported way to override it, a language change applies on the next launch. The
+  picker says so once a change is pending, rather than pretending the tap did nothing.
+- **One source of language.** `PlatformLocale` decides it for both the UI and the content,
+  so the two can never disagree about what is on screen.
 
 ---
 
@@ -157,16 +160,18 @@ time travel possible at all.
 
 ```bash
 ./gradlew :shared:testAndroidHostTest      # unit + integration + smoke (JVM)
+./gradlew :fakeApi:testAndroidHostTest     # the content service
 ./gradlew :shared:iosSimulatorArm64Test    # the same tests on iOS
 ```
 
-**111 tests**, all green on both platforms. The interesting ones are not the reducer tests:
+**115 tests**, all green on both platforms. The interesting ones are not the reducer tests:
 
 | Test | What it protects |
 |---|---|
 | `CoroutineConcurrencyLabTest` | That a buggy demo still fails — if someone "fixes" it, the lesson becomes a lie |
 | `CodeLanguagePolicyTest` | No Polish and no hard-coded `Text("…")` anywhere in Kotlin sources |
-| `StringCatalogContentTest` | Both locales define every key with matching `%1$s` placeholders, and every language in the enum ships a content directory |
+| `StringResourcesTest` | Both locales define every key the code uses, with matching `%1$s` placeholders and no unused or blank entries |
+| `BundledContentTest` | The content service ships every document in every language it serves, and nothing it does not publish |
 | `QuestionsContentTest` | Unique ids, distinct options, and correct answers not always at the same index |
 | `KoinModulesTest` | The DI graph resolves — a missing definition fails the build, not the user |
 
@@ -292,7 +297,7 @@ both humans and coding agents, and most of it is enforced by tests.
 The short version:
 
 - Kotlin sources are **English only**, including comments and test names.
-- User-facing text lives in the string catalogue; symbols and counter formats count as text.
+- User-facing text lives in `strings.xml`; symbols and counter formats count as text.
 - A repository interface belongs to `domain`, its implementation to `data`.
 - The reducer stays pure: no I/O, no clock, no randomness.
 
