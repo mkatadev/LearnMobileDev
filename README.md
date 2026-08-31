@@ -81,7 +81,35 @@ shared/src/commonMain/kotlin/pl/prodevcode/learnmobiledev/
 ├─ data/            adapters: sources, parsers, DTOs, repositories
 ├─ presentation/    Contract + Reducer + ViewModel + Screen, per feature
 └─ di/              Koin modules, one per layer
+
+fakeApi/src/commonMain/kotlin/pl/prodevcode/learnmobiledev/fakeapi/
+├─ http/            request, response, router with path templates
+├─ routes/          the endpoints this service publishes
+└─ ...              storage port, language catalogue, client factory
 ```
+
+### The content backend
+
+Course content is not read from bundled assets; it is fetched over HTTP from `:fakeApi`, an
+in-process stand-in for a content service:
+
+```
+GET /api/v1/content/{resource}?lang=xx   ->  200 + Content-Language
+                                             404 unknown resource / no such document
+                                             503 outage switch
+```
+
+Only the *transport* is fake. Above it there is a genuine HTTP surface — paths, query
+parameters, status codes, headers — and below it genuine routing and storage, so the app
+uses an ordinary Ktor client and cannot tell the difference. Swapping in a deployed server
+means changing an engine and a base URL, nothing else. A Ktor `MockEngine` rather than an
+embedded server, because a real server would not run on iOS.
+
+Language negotiation lives on the server, where it belongs: the client states a preference,
+the backend answers with the translation it actually has and reports it in
+`Content-Language`. `FakeBackendConfig` adds latency and an outage switch, so loading and
+failure states can be exercised on demand. UI strings stay bundled — they are not backend
+data.
 
 ### The MVI core
 
@@ -170,7 +198,7 @@ Watch Logcat while using the app: `LoggingMiddleware` prints every reduction as
 
 ## CI/CD
 
-Two workflows, split by purpose.
+Three workflows, split by purpose.
 
 **`ci.yml`** runs on every pull request, as two jobs in parallel:
 
@@ -183,6 +211,22 @@ The split is by platform rather than by activity: lint, tests and the APK share 
 cache and one checkout, so separate jobs would pay the setup cost three times for no extra
 parallelism. Android and iOS genuinely need different runners, and the slow macOS job
 starts immediately instead of queueing.
+
+**`fake-api.yml`** runs only when the content backend changes — `fakeApi/**`, the version
+catalogue, `settings.gradle.kts` or the workflow itself. Most pull requests touch lessons or
+UI and have no reason to pay for a backend run. The catalogue and settings file are in the
+trigger because the module's Ktor version and its presence in the build are declared there,
+so a change to either can break it without a single file under `fakeApi/` being touched.
+
+It runs the backend's own tests, the end-to-end contract test from `:shared`, and a
+Kotlin/Native compile. Compiling is enough for iOS: `ci.yml` already links the module into
+the framework and runs the shared suite on the simulator, so a second macOS runner would buy
+very little for what it costs.
+
+> **This job must not be a required status check.** A required check that is path-filtered
+> never reports on the pull requests that skip it, and GitHub waits for it forever — the PR
+> becomes unmergeable. The jobs in `ci.yml` are unfiltered, which is exactly why they are the
+> required ones.
 
 **`release.yml`** runs on every merge into `main` and publishes a GitHub Release with both
 artifacts attached. Since `main` can only be reached through a passing PR, "merged" already
@@ -210,8 +254,8 @@ can only exist for a commit that actually produced artifacts.
 
 ### Branch protection
 
-`main` accepts no direct pushes. A change has to go through a pull request with both CI jobs
-green; force pushes and branch deletion are disabled, history stays linear, and the rules
+`main` accepts no direct pushes. A change has to go through a pull request with both `ci.yml`
+jobs green — and only those two, for the reason given above; force pushes and branch deletion are disabled, history stays linear, and the rules
 apply to administrators too.
 
 ---

@@ -1,0 +1,77 @@
+name: Fake API
+
+# The content backend is a module of its own, so it gets a pipeline of its own — but only
+# when it actually changes. Most pull requests here touch lessons or UI and have no reason
+# to pay for a backend run.
+#
+# The version catalogue and settings file are in the trigger too: the module's Ktor version
+# and its very presence in the build are declared there, so a change to either can break it
+# without a single file under fakeApi/ being touched.
+#
+# ⚠️ Do NOT add this job to the required status checks in branch protection. A required
+# check that is path-filtered never reports on pull requests that skip it, and GitHub waits
+# for it forever — the PR becomes unmergeable. The checks in ci.yml are unfiltered, which
+# is precisely why they are the required ones.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'fakeApi/**'
+      - 'gradle/libs.versions.toml'
+      - 'settings.gradle.kts'
+      - '.github/workflows/fake-api.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: fake-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          # Matches gradle/gradle-daemon-jvm.properties, so the wrapper does not have to
+          # provision a toolchain on every run.
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Backend tests
+        # The routing, language negotiation and status handling, driven through the HTTP
+        # surface.
+        run: ./gradlew :fakeApi:testAndroidHostTest --no-daemon
+
+      - name: Contract tests
+        # The backend is only useful if the app can still talk to it, and this is the one
+        # suite that exercises the whole path end to end. A change to a status code or a
+        # route that keeps the backend's own tests green would slip through without it.
+        run: ./gradlew :shared:testAndroidHostTest --tests '*ContentApiIntegrationTest*' --no-daemon
+
+      - name: Compile for iOS
+        # The module is common Kotlin, but "compiles on the JVM" is not "compiles on
+        # Native". Compiling is enough here: ci.yml links it into the iOS framework and
+        # runs the shared suite on the simulator, so a second macOS runner would buy very
+        # little for what it costs.
+        run: ./gradlew :fakeApi:compileKotlinIosSimulatorArm64 --no-daemon
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: reports-fake-api
+          path: |
+            fakeApi/build/reports/tests/
+            shared/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore
