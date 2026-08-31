@@ -320,7 +320,21 @@ an accidental interleaving.
 
 ---
 
-## 7. Definition of done
+## 7. Branches and releases
+
+`main` is protected: no direct pushes, both CI jobs must pass, history stays linear, and
+the rules apply to administrators as well.
+
+- Branch from `main`, open a pull request, merge with squash.
+- `ci.yml` gates the merge; `release.yml` builds and publishes after it.
+- Bump `app.versionName` in `gradle.properties` in the same PR as the change that warrants
+  it. `versionCode` is the CI run number and is never set by hand.
+- Never commit a keystore, a certificate or a token. Signing material belongs in repository
+  secrets.
+
+---
+
+## 8. Definition of done
 
 Before calling a change complete:
 

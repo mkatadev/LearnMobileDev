@@ -11,6 +11,7 @@ cross-referenced in the code you are reading.
 [![Compose Multiplatform](https://img.shields.io/badge/Compose%20Multiplatform-1.11.1-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/compose-multiplatform/)
 [![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS-lightgrey)](#running-it)
 [![Tests](https://img.shields.io/badge/tests-111%20passing-success)](#testing)
+[![CI](https://github.com/mkatadev/LearnMobileDev/actions/workflows/ci.yml/badge.svg)](https://github.com/mkatadev/LearnMobileDev/actions/workflows/ci.yml)
 
 ---
 
@@ -154,7 +155,7 @@ assertEquals(listOf("Ann"), repository.loadedQueries)   // exactly one request
 by the Gradle wrapper), Android Studio. For iOS: macOS with Xcode.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/mkatadev/LearnMobileDev.git
 cd LearnMobileDev
 
 ./gradlew :androidApp:assembleDebug     # Android
@@ -164,6 +165,54 @@ For iOS, open `iosApp/iosApp.xcodeproj` in Xcode and run.
 
 Watch Logcat while using the app: `LoggingMiddleware` prints every reduction as
 `intent → state before → state after`, which makes unidirectional data flow visible.
+
+---
+
+## CI/CD
+
+Two workflows, split by purpose.
+
+**`ci.yml`** runs on every pull request, as two jobs in parallel:
+
+| Job | Runner | Does |
+|---|---|---|
+| `Android` | Ubuntu | Lint, shared tests on the JVM, release APK |
+| `iOS` | macOS | The same shared tests on the simulator, release archive |
+
+The split is by platform rather than by activity: lint, tests and the APK share one Gradle
+cache and one checkout, so separate jobs would pay the setup cost three times for no extra
+parallelism. Android and iOS genuinely need different runners, and the slow macOS job
+starts immediately instead of queueing.
+
+**`release.yml`** runs on every merge into `main` and publishes a GitHub Release with both
+artifacts attached. Since `main` can only be reached through a passing PR, "merged" already
+implies "verified", so the release workflow builds rather than re-checking.
+
+### Versioning
+
+`versionName` lives in `gradle.properties`, so bumping a release is a reviewed change in a
+PR. `versionCode` is the CI run number: monotonic, unique and never reused. Both are passed
+in at build time:
+
+```bash
+./gradlew :androidApp:assembleRelease \
+  -Papp.versionName=1.0.0 -Papp.versionCode=42
+```
+
+Artifacts are named `LearnMobileDev-<version>-<code>.apk` / `.ipa`, so a downloaded file
+still says what it is. The tag (`v1.0.0+1`) is created by the workflow, which means a tag
+can only exist for a commit that actually produced artifacts.
+
+> **Signing.** The Android release is signed with the debug key, because this project ships
+> no keystore and an unsigned APK cannot be installed at all. The IPA is unsigned and needs
+> re-signing before it will run on a device. Both are deliberate for a teaching repository —
+> replace them with real credentials stored as repository secrets before shipping anywhere.
+
+### Branch protection
+
+`main` accepts no direct pushes. A change has to go through a pull request with both CI jobs
+green; force pushes and branch deletion are disabled, history stays linear, and the rules
+apply to administrators too.
 
 ---
 
