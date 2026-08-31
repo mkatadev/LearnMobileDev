@@ -24,10 +24,10 @@ class CodeLanguagePolicyTest {
     )
 
     /**
-     * Fictional personal data in demo fixtures is data, not code, so Polish surnames are
-     * allowed there. This is the single, deliberate exception.
+     * Nothing is exempt any more: the demo directory, Polish surnames included, moved
+     * behind the fake API and lives in its JSON table, where data belongs.
      */
-    private val allowedFiles = setOf("InMemoryUserRepository.kt")
+    private val allowedFiles = emptySet<String>()
 
     private val sourceRoots = listOf(
         File("src"),

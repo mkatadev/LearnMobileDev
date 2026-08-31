@@ -9,9 +9,10 @@ import pl.prodevcode.learnmobiledev.data.remote.ApiLessonsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiQuestionsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiScenariosSource
 import pl.prodevcode.learnmobiledev.data.remote.ContentApi
+import pl.prodevcode.learnmobiledev.data.remote.UsersApi
 import pl.prodevcode.learnmobiledev.data.remote.createContentHttpClient
 import pl.prodevcode.learnmobiledev.data.preferences.KeyValueThemePreferences
-import pl.prodevcode.learnmobiledev.data.repository.InMemoryUserRepository
+import pl.prodevcode.learnmobiledev.data.repository.ApiUserRepository
 import pl.prodevcode.learnmobiledev.data.repository.LessonJsonRepository
 import pl.prodevcode.learnmobiledev.data.repository.QuestionJsonRepository
 import pl.prodevcode.learnmobiledev.data.repository.ScenarioJsonRepository
@@ -27,6 +28,7 @@ import pl.prodevcode.learnmobiledev.domain.repository.ScenarioRepository
 import pl.prodevcode.learnmobiledev.domain.repository.ThemePreferences
 import pl.prodevcode.learnmobiledev.domain.repository.UserRepository
 import pl.prodevcode.learnmobiledev.fakeapi.FakeBackend
+import pl.prodevcode.learnmobiledev.fakeapi.FakeBackendConfig
 import pl.prodevcode.learnmobiledev.fakeapi.LanguageCatalog
 
 /**
@@ -37,8 +39,6 @@ import pl.prodevcode.learnmobiledev.fakeapi.LanguageCatalog
  * app only ever sees narrow, separate contracts.
  */
 val dataModule: Module = module {
-    single { InMemoryUserRepository() } bind UserRepository::class
-    single<NetworkFailureSwitch> { get<InMemoryUserRepository>() }
     // The platform locale is the only source of language in the app. Resources already
     // resolved against it, so anything that loaded content from a different one would be
     // showing a language the surrounding UI is not using.
@@ -55,6 +55,9 @@ val dataModule: Module = module {
                 supported = AppLanguage.SUPPORTED_TAGS,
                 default = AppLanguage.DEFAULT.tag,
             ),
+            // Enough round-trip time for loading states, debounce and cancellation to be
+            // visible on screen. Instant answers hide exactly what this app teaches.
+            config = FakeBackendConfig(latencyMillis = 500),
         )
     }
     single {
@@ -67,6 +70,12 @@ val dataModule: Module = module {
         )
     }
     single { ContentApi(get(), get()) }
+    // Users come from the same service, over the same client: the app holds no directory
+    // of its own, and the failure switch now asks the backend to fail rather than faking
+    // an error locally.
+    single { UsersApi(get()) }
+    single { ApiUserRepository(get()) } bind UserRepository::class
+    single<NetworkFailureSwitch> { get<ApiUserRepository>() }
     single {
         LessonJsonRepository(ApiLessonsSource(get()), get())
     } bind LessonRepository::class

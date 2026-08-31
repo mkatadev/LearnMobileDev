@@ -6,6 +6,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +29,7 @@ import pl.prodevcode.learnmobiledev.domain.repository.UserRepository
 import pl.prodevcode.learnmobiledev.domain.repository.UserSyncException
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetFavoriteUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.UpdateUserUseCase
 
 /**
  * Store tests: they verify **asynchronous behaviour** (debounce, cancellation, rollback)
@@ -41,9 +43,11 @@ class UsersViewModelTest {
     private class TestRepository : UserRepository, NetworkFailureSwitch {
         override var failNextLoad: Boolean = false
         var favoriteShouldFail: Boolean = false
+        var editShouldFail: Boolean = false
         var loadDelayMs: Long = 0
         val loadedQueries = mutableListOf<String>()
         val savedFavorites = mutableListOf<Pair<String, Boolean>>()
+        val savedEdits = mutableListOf<Edit>()
 
         var users: List<User> = listOf(
             User("u-1", "Anna", "anna@x.pl", "Android"),
@@ -66,7 +70,24 @@ class UsersViewModelTest {
             if (favoriteShouldFail) throw UserSyncException.FavoriteRejected(userId)
             return favorite
         }
+
+        override suspend fun updateUser(
+            userId: String,
+            name: String,
+            email: String,
+            role: String,
+        ): User {
+            savedEdits += Edit(userId, name, email, role)
+            if (editShouldFail) throw UserSyncException.InvalidUser(userId)
+            // Answering with a normalized value proves the store adopts what the server
+            // stored rather than what the form held.
+            val stored = User(userId, name, email.lowercase(), role)
+            users = users.map { if (it.id == userId) stored else it }
+            return stored
+        }
     }
+
+    private data class Edit(val userId: String, val name: String, val email: String, val role: String)
 
     private fun viewModel(
         repository: TestRepository,
@@ -74,6 +95,7 @@ class UsersViewModelTest {
     ) = UsersViewModel(
         searchUsers = SearchUsersUseCase(repository),
         setFavorite = SetFavoriteUseCase(repository),
+        updateUser = UpdateUserUseCase(repository),
         networkFailureSwitch = repository,
         middlewares = middlewares,
     )
@@ -226,6 +248,82 @@ class UsersViewModelTest {
         vm.jumpTo(beforeFavorite.index)
 
         assertFalse(vm.state.value.users.first { it.id == "u-1" }.isFavorite)
+    }
+
+
+    @Test
+    fun `an edit is saved and the list shows what the server stored`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.EditClicked("u-1"))
+        vm.dispatch(UsersIntent.Ui.EditNameChanged("Anna Nowak"))
+        vm.dispatch(UsersIntent.Ui.EditEmailChanged("ANNA@X.PL"))
+        vm.dispatch(UsersIntent.Ui.EditSubmitted)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.savedEdits.size)
+        assertNull(vm.state.value.editor)
+        val saved = vm.state.value.users.first { it.id == "u-1" }
+        assertEquals("Anna Nowak", saved.name)
+        // Lower-cased by the fake server: the store adopts the answer, not the form.
+        assertEquals("anna@x.pl", saved.email)
+    }
+
+    /** Nothing typed, nothing to save: the store must not spend a round trip on it. */
+    @Test
+    fun `submitting an unchanged form performs no request`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.EditClicked("u-1"))
+        vm.dispatch(UsersIntent.Ui.EditSubmitted)
+        advanceUntilIdle()
+
+        assertTrue(repository.savedEdits.isEmpty())
+        assertNull(vm.state.value.editor)
+    }
+
+    @Test
+    fun `an incomplete form is not sent`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.EditClicked("u-1"))
+        vm.dispatch(UsersIntent.Ui.EditNameChanged(""))
+        vm.dispatch(UsersIntent.Ui.EditSubmitted)
+        advanceUntilIdle()
+
+        assertTrue(repository.savedEdits.isEmpty())
+        assertEquals("", vm.state.value.editor?.name)
+    }
+
+    @Test
+    fun `a rejected edit reports a message and keeps the form open`() = runTest(dispatcher) {
+        val repository = TestRepository().apply { editShouldFail = true }
+        val vm = viewModel(repository)
+        val effects = mutableListOf<UsersEffect>()
+        collectEffects(vm, effects)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.EditClicked("u-1"))
+        vm.dispatch(UsersIntent.Ui.EditEmailChanged("not-an-email"))
+        vm.dispatch(UsersIntent.Ui.EditSubmitted)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf<UsersEffect>(UsersEffect.ShowMessage(AppString.ErrorUserInvalid.asUiText())),
+            effects,
+        )
+        assertEquals("not-an-email", vm.state.value.editor?.email)
+        assertEquals("Anna", vm.state.value.users.first { it.id == "u-1" }.name)
     }
 
     @Test

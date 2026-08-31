@@ -25,6 +25,7 @@ val presentationModule: Module = module {
         UsersViewModel(
             searchUsers = get(),
             setFavorite = get(),
+            updateUser = get(),
             networkFailureSwitch = get(),
         )
     }

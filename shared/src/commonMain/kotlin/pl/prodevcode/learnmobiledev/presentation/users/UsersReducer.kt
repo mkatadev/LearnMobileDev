@@ -84,8 +84,47 @@ val UsersReducer = Reducer<UsersState, UsersIntent> { state, intent ->
             savingFavorites = state.savingFavorites - intent.userId,
             users = state.users.toggleFavorite(intent.userId),
         )
+
+        // Opening the editor copies the row into a draft. Editing the list in place would
+        // mean a cancelled edit had already changed what other screens read.
+        is UsersIntent.Ui.EditClicked -> state.users
+            .firstOrNull { it.id == intent.userId }
+            ?.let { state.copy(editor = UserEditor.of(it)) }
+            ?: state
+
+        is UsersIntent.Ui.EditNameChanged ->
+            state.mapEditor { it.copy(name = intent.name) }
+
+        is UsersIntent.Ui.EditEmailChanged ->
+            state.mapEditor { it.copy(email = intent.email) }
+
+        is UsersIntent.Ui.EditRoleChanged ->
+            state.mapEditor { it.copy(role = intent.role) }
+
+        is UsersIntent.Ui.EditCancelled -> state.copy(editor = null)
+
+        // Command-like: whether to call the server is the store's decision, not the
+        // reducer's, so the draft is left exactly as the user typed it.
+        is UsersIntent.Ui.EditSubmitted -> state
+
+        is UsersIntent.Internal.EditSaveStarted -> state.mapEditor { it.copy(isSaving = true) }
+
+        // No optimistic update here, unlike the favorite: an edit is several fields that
+        // the server may normalize or reject, so the list adopts what came back and
+        // nothing before that.
+        is UsersIntent.Internal.EditSaveSucceeded -> state.copy(
+            editor = null,
+            users = state.users.map { if (it.id == intent.user.id) intent.user else it },
+        )
+
+        // The editor stays open with the rejected values: the user needs to see and fix
+        // them, and a form that empties itself on failure is a form people retype.
+        is UsersIntent.Internal.EditSaveFailed -> state.mapEditor { it.copy(isSaving = false) }
     }
 }
+
+private fun UsersState.mapEditor(transform: (UserEditor) -> UserEditor): UsersState =
+    editor?.let { copy(editor = transform(it)) } ?: this
 
 private fun List<User>.toggleFavorite(userId: String) =
     map { if (it.id == userId) it.copy(isFavorite = !it.isFavorite) else it }

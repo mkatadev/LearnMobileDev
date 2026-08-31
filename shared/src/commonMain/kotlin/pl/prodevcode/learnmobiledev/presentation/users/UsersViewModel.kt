@@ -23,6 +23,7 @@ import pl.prodevcode.learnmobiledev.domain.repository.NetworkFailureSwitch
 import pl.prodevcode.learnmobiledev.domain.repository.UserSyncException
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetFavoriteUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.UpdateUserUseCase
 
 /**
  * Store for the users screen — this is where all the messy parts live: I/O,
@@ -38,6 +39,7 @@ import pl.prodevcode.learnmobiledev.domain.usecase.SetFavoriteUseCase
 class UsersViewModel(
     private val searchUsers: SearchUsersUseCase,
     private val setFavorite: SetFavoriteUseCase,
+    private val updateUser: UpdateUserUseCase,
     private val networkFailureSwitch: NetworkFailureSwitch? = null,
     middlewares: List<Middleware<UsersState, UsersIntent>> = listOf(LoggingMiddleware("Users")),
 ) : MviStore<UsersState, UsersIntent, UsersEffect>(
@@ -102,8 +104,16 @@ class UsersViewModel(
                 // change and there is no reason to perform I/O.
                 if (before != after) saveFavorite(intent.userId, after)
 
+            is UsersIntent.Ui.EditSubmitted -> submitEdit(after)
+
             is UsersIntent.Internal.LoadFailed ->
                 emitEffect(UsersEffect.ShowMessage(intent.message))
+
+            is UsersIntent.Internal.EditSaveFailed ->
+                emitEffect(UsersEffect.ShowMessage(intent.message))
+
+            is UsersIntent.Internal.EditSaveSucceeded ->
+                emitEffect(UsersEffect.ShowMessage(AppString.UserEditSaved.asUiText()))
 
             is UsersIntent.Internal.FavoriteSaveFailed ->
                 emitEffect(
@@ -158,6 +168,40 @@ class UsersViewModel(
     }
 
     /**
+     * Saves the open editor.
+     *
+     * Two decisions the reducer must not make: refusing an incomplete or already running
+     * form, and skipping the request when nothing was actually edited. Both are about
+     * *what to do*, and both keep a needless round trip off the wire.
+     */
+    private fun submitEdit(state: UsersState) {
+        val editor = state.editor?.takeIf { it.canSave } ?: return
+        val current = state.users.firstOrNull { it.id == editor.userId }
+
+        if (current != null && editor.matches(current)) {
+            dispatch(UsersIntent.Internal.EditSaveSucceeded(current))
+            return
+        }
+
+        dispatch(UsersIntent.Internal.EditSaveStarted)
+        viewModelScope.launch {
+            try {
+                val saved = updateUser(
+                    userId = editor.userId,
+                    name = editor.name,
+                    email = editor.email,
+                    role = editor.role,
+                )
+                dispatch(UsersIntent.Internal.EditSaveSucceeded(saved))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                dispatch(UsersIntent.Internal.EditSaveFailed(error.toUiText()))
+            }
+        }
+    }
+
+    /**
      * Maps a domain failure to a localized message.
      *
      * The exception *type* decides what the user reads — never `error.message`, which is
@@ -166,6 +210,8 @@ class UsersViewModel(
     private fun Exception.toUiText(): UiText = when (this) {
         is UserSyncException.NetworkUnavailable -> AppString.ErrorNetworkUnavailable.asUiText()
         is UserSyncException.FavoriteRejected -> AppString.ErrorFavoriteRejected.asUiText()
+        is UserSyncException.InvalidUser -> AppString.ErrorUserInvalid.asUiText()
+        is UserSyncException.UserNotFound -> AppString.ErrorUserNotFound.asUiText()
         else -> AppString.ErrorUnknown.asUiText()
     }
 

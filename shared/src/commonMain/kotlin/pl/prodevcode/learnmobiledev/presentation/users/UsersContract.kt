@@ -23,6 +23,8 @@ data class UsersState(
     /** IDs whose favorite save is in progress: blocks double-clicks. */
     val savingFavorites: Set<String> = emptySet(),
     val simulateNetworkError: Boolean = false,
+    /** The open editor, or `null` when nobody is being edited. */
+    val editor: UserEditor? = null,
 ) : MviState {
 
     /**
@@ -40,6 +42,38 @@ data class UsersState(
         get() = users.count { it.isFavorite }
 }
 
+/**
+ * The edit form as state: the id being edited, the draft values and whether a save is in
+ * flight.
+ *
+ * The draft is in the store rather than in a `remember` inside the composable, which is
+ * what makes an edit survive rotation, replay on the timeline, and render identically on
+ * iOS. A text field is a view of state, not the place state lives.
+ */
+data class UserEditor(
+    val userId: String,
+    val name: String,
+    val email: String,
+    val role: String,
+    val isSaving: Boolean = false,
+) {
+    /**
+     * A cheap, local sanity check so the Save button can be disabled — **not** the rule
+     * that decides what may be stored. The server owns that and answers `422`; this only
+     * spares the user a round trip for an obviously empty form.
+     */
+    val canSave: Boolean
+        get() = !isSaving && name.isNotBlank() && role.isNotBlank() && email.isNotBlank()
+
+    fun matches(user: User): Boolean =
+        name.trim() == user.name && email.trim() == user.email && role.trim() == user.role
+
+    companion object {
+        fun of(user: User): UserEditor =
+            UserEditor(userId = user.id, name = user.name, email = user.email, role = user.role)
+    }
+}
+
 sealed interface UsersIntent : MviIntent {
 
     /** Intents coming from the user. */
@@ -52,6 +86,12 @@ sealed interface UsersIntent : MviIntent {
         data class UserClicked(val userId: String) : Ui
         data class SimulateErrorChanged(val enabled: Boolean) : Ui
         data object ErrorDismissed : Ui
+        data class EditClicked(val userId: String) : Ui
+        data class EditNameChanged(val name: String) : Ui
+        data class EditEmailChanged(val email: String) : Ui
+        data class EditRoleChanged(val role: String) : Ui
+        data object EditCancelled : Ui
+        data object EditSubmitted : Ui
     }
 
     /**
@@ -66,6 +106,11 @@ sealed interface UsersIntent : MviIntent {
         data class FavoriteSaveStarted(val userId: String) : Internal
         data class FavoriteSaveSucceeded(val userId: String) : Internal
         data class FavoriteSaveFailed(val userId: String, val message: UiText) : Internal
+        data object EditSaveStarted : Internal
+
+        /** Carries the user **as stored by the server**, which is the new truth. */
+        data class EditSaveSucceeded(val user: User) : Internal
+        data class EditSaveFailed(val message: UiText) : Internal
     }
 }
 

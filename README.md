@@ -86,20 +86,41 @@ fakeApi/src/commonMain/
 ├─ kotlin/.../fakeapi/
 │  ├─ http/         request, response, router with path templates
 │  ├─ routes/       the endpoints this service publishes
-│  └─ ...           storage, language catalogue, client factory
-└─ composeResources/files/<lang>/   lessons, questions, scenarios — the service's data
+│  └─ ...           storage, user directory, language catalogue, client factory
+└─ composeResources/files/
+   ├─ <lang>/       lessons, questions, scenarios — the content, per language
+   └─ users.json    the user table — the same in every language
 ```
 
-### The content backend
+### The backend
 
-Course content is not read from bundled assets; it is fetched over HTTP from `:fakeApi`, an
-in-process stand-in for a content service:
+Neither the course content nor the user directory is held by the app; both are fetched over
+HTTP from `:fakeApi`, an in-process stand-in for a real service:
 
 ```
 GET /api/v1/content/{resource}?lang=xx   ->  200 + Content-Language
                                              404 unknown resource / no such document
                                              503 outage switch
+
+GET /api/v1/users?q=                     ->  200 the directory, filtered server-side
+PUT /api/v1/users/{id}                   ->  200 the row as stored
+                                             404 unknown user
+                                             422 values the server will not store
+PUT /api/v1/users/{id}/favorite          ->  200 the flag as stored
+                                             404 unknown user
+                                             409 the server refuses this write
 ```
+
+Searching is a query parameter rather than a full download filtered on the phone, and a
+favorite is only true once the server has said so — the users screen's optimistic update is
+rolled back by a genuine `409`. An edit is the mirror image: no optimistic update at all,
+because several fields may be normalized or rejected at once, so the list adopts the row
+the server answers with and nothing before that. Validation lives on the server and comes
+back as `422`; the form only disables Save while a field is empty.
+
+The demo's "simulate a network error" switch sends
+`X-Fake-Fault: unavailable`, so the failure is a real `503` on that call and does not knock
+the content service over.
 
 Only the *transport* is fake. Above it there is a genuine HTTP surface — paths, query
 parameters, status codes, headers — and below it genuine routing and storage, so the app
@@ -107,11 +128,12 @@ uses an ordinary Ktor client and cannot tell the difference. Swapping in a deplo
 means changing an engine and a base URL, nothing else. A Ktor `MockEngine` rather than an
 embedded server, because a real server would not run on iOS.
 
-The content documents live in `:fakeApi`, not in the app. They are the service's database,
-and keeping them there means nothing above the HTTP boundary can reach them: the app has no
-path to another module's resources and must go through the API, exactly as it would against
-a real server. UI strings are a separate matter: they stay in `:shared` as ordinary string
-resources, because they are the app's own text rather than content served to it.
+The content documents and the user table live in `:fakeApi`, not in the app. They are the
+service's database, and keeping them there means nothing above the HTTP boundary can reach
+them: the app has no path to another module's resources and must go through the API,
+exactly as it would against a real server. UI strings are a separate matter: they stay in
+`:shared` as ordinary string resources, because they are the app's own text rather than
+content served to it.
 
 Language negotiation lives on the server, where it belongs: the client states a preference,
 the backend answers with the translation it actually has and reports it in
@@ -145,8 +167,9 @@ time travel possible at all.
 - **Errors carry a type, not a message.** `error.message` is technical English for logs;
   the presentation layer maps the exception *type* to a localized string. State holds
   `UiText`, never `String`.
-- **Content is data.** Lessons, questions and scenarios are JSON documents owned by the
-  content service, validated by tests rather than trusted.
+- **Content and users are data.** Lessons, questions, scenarios and the user directory are
+  JSON documents owned by the backend, validated by tests rather than trusted. The app
+  keeps no copy of either.
 - **UI strings are ordinary string resources** (`values/`, `values-pl/`), resolved through
   the `AppString` key enum. Because Compose Resources follows the *system* locale and 1.11
   offers no supported way to override it, a language change applies on the next launch. The
@@ -160,22 +183,24 @@ time travel possible at all.
 
 ```bash
 ./gradlew :shared:testAndroidHostTest      # unit + integration + smoke (JVM)
-./gradlew :fakeApi:testAndroidHostTest     # the content service
+./gradlew :fakeApi:testAndroidHostTest     # the fake backend
 ./gradlew :shared:iosSimulatorArm64Test    # the same tests on iOS
 ```
 
-**115 tests**, all green on both platforms. The interesting ones are not the reducer tests:
+**148 tests**, all green on both platforms. The interesting ones are not the reducer tests:
 
 | Test | What it protects |
 |---|---|
 | `CoroutineConcurrencyLabTest` | That a buggy demo still fails — if someone "fixes" it, the lesson becomes a lie |
 | `CodeLanguagePolicyTest` | No Polish and no hard-coded `Text("…")` anywhere in Kotlin sources |
 | `StringResourcesTest` | Both locales define every key the code uses, with matching `%1$s` placeholders and no unused or blank entries |
-| `BundledContentTest` | The content service ships every document in every language it serves, and nothing it does not publish |
+| `BundledContentTest` | The backend ships every document in every language it serves, plus the user table, and nothing it does not publish |
+| `UserRoutesTest` | The user endpoints answer with the right status: server-side search, a stored favorite, a stored edit, `404`, `409`, `422` and injected faults |
+| `ApiUserRepositoryTest` | The users screen really goes over HTTP — search, favorite and edit, from repository to user table, with each status mapped to its domain failure |
 | `QuestionsContentTest` | Unique ids, distinct options, and correct answers not always at the same index |
 | `KoinModulesTest` | The DI graph resolves — a missing definition fails the build, not the user |
 
-Async behaviour is tested on virtual time, so a 350 ms debounce and a 700 ms network delay
+Async behaviour is tested on virtual time, so a 350 ms debounce and a 500 ms network delay
 cost milliseconds:
 
 ```kotlin
@@ -226,7 +251,7 @@ cache and one checkout, so separate jobs would pay the setup cost three times fo
 parallelism. Android and iOS genuinely need different runners, and the slow macOS job
 starts immediately instead of queueing.
 
-**`fake-api.yml`** runs only when the content backend changes — `fakeApi/**`, the version
+**`fake-api.yml`** runs only when the fake backend changes — `fakeApi/**`, the version
 catalogue, `settings.gradle.kts` or the workflow itself. Most pull requests touch lessons or
 UI and have no reason to pay for a backend run. The catalogue and settings file are in the
 trigger because the module's Ktor version and its presence in the build are declared there,
