@@ -1,0 +1,1777 @@
+{
+  "lessons": [
+    {
+      "id": "mvi-basics",
+      "title": "1. MVI – fundamenty",
+      "summary": "Trzy filary wzorca i czym różni się od MVVM",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "MVI (Model – View – Intent) to sposób organizacji ekranu, w którym stan jest jeden, niemutowalny, a każda jego zmiana ma nazwę."
+        },
+        {
+          "type": "subheading",
+          "text": "Trzy filary"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Filar",
+            "Co oznacza"
+          ],
+          "rows": [
+            [
+              "Jedno źródło prawdy",
+              "Cały ekran opisuje jeden obiekt State"
+            ],
+            [
+              "Jednokierunkowy przepływ",
+              "View → Intent → Reducer → State → View"
+            ],
+            [
+              "Czysta redukcja",
+              "reduce(State, Intent): State, bez I/O"
+            ]
+          ]
+        },
+        {
+          "type": "code",
+          "code": "      dispatch(Intent)          reduce(State, Intent)\nView ──────────────► Store ──────────────────────────► State ──► View\n                       │\n                       └── I/O ──► Intent.Internal(wynik) ──► reduce",
+          "caption": "Przepływ danych"
+        },
+        {
+          "type": "subheading",
+          "text": "Czym to się różni od MVVM?"
+        },
+        {
+          "type": "paragraph",
+          "text": "W MVVM masz zwykle kilka StateFlow i wiele metod publicznych (**load()**, **onSearch()**, **toggleFavorite()**), z których każda mutuje stan po swojemu. W MVI istnieje jedno wejście (**dispatch**) i jedno miejsce mutacji (reducer)."
+        },
+        {
+          "type": "rule",
+          "text": "Jeśli w ViewModelu widzisz `_state.value = ...` w pięciu miejscach, to nie jest MVI – to MVVM z data class."
+        },
+        {
+          "type": "subheading",
+          "text": "Podział intencji – rzecz kluczowa"
+        },
+        {
+          "type": "code",
+          "code": "sealed interface UsersIntent {\n    sealed interface Ui : UsersIntent {        // czego chce użytkownik\n        data class QueryChanged(val query: String) : Ui\n        data class FavoriteToggled(val userId: String) : Ui\n    }\n    sealed interface Internal : UsersIntent {  // co się faktycznie wydarzyło\n        data class LoadSucceeded(val users: List<User>) : Internal\n        data class LoadFailed(val message: String) : Internal\n    }\n}",
+          "caption": "UsersContract.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Wynik zapytania sieciowego **nie** ustawia stanu bezpośrednio – wraca do pętli jako Intent.Internal i przechodzi przez ten sam reducer. Dzięki temu każda zmiana stanu jest nazwana i widoczna na osi czasu."
+        },
+        {
+          "type": "exercise",
+          "number": 1,
+          "text": "Otwórz zakładkę Demo, rozwiń „Oś czasu intencji” i wpisz coś w wyszukiwarkę. Policz, ile intencji powstaje przy jednym wyszukiwaniu."
+        }
+      ]
+    },
+    {
+      "id": "mvi-practice",
+      "title": "2. MVI w praktyce",
+      "summary": "Efekty, optymistyczne update'y, debounce, time travel",
+      "blocks": [
+        {
+          "type": "subheading",
+          "text": "a) Efekty jednorazowe"
+        },
+        {
+          "type": "paragraph",
+          "text": "Snackbar i nawigacja **nie mogą** być polem w stanie. Stan jest odtwarzalny – po obrocie ekranu snackbar pokazałby się drugi raz. Efekty jadą osobnym kanałem i są konsumowane dokładnie raz."
+        },
+        {
+          "type": "code",
+          "code": "LaunchedEffect(viewModel) {\n    viewModel.effects.collect { effect ->\n        when (effect) {\n            is UsersEffect.ShowMessage -> snackbar.showSnackbar(effect.text)\n            is UsersEffect.OpenUserDetails -> onOpenDetails(effect.userId)\n        }\n    }\n}"
+        },
+        {
+          "type": "subheading",
+          "text": "b) Optymistyczna aktualizacja z rollbackiem"
+        },
+        {
+          "type": "paragraph",
+          "text": "Kliknięcie gwiazdki zmienia UI natychmiast, przed odpowiedzią serwera. Gdy serwer odmówi, cofamy zmianę."
+        },
+        {
+          "type": "code",
+          "code": "is UsersIntent.Ui.FavoriteToggled ->\n    if (intent.userId in state.savingFavorites) state   // ochrona przed dwuklikiem\n    else state.copy(users = state.users.toggleFavorite(intent.userId))\n\nis UsersIntent.Internal.FavoriteSaveFailed ->           // serwer odmówił\n    state.copy(users = state.users.toggleFavorite(intent.userId))",
+          "caption": "UsersReducer.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "W zakładce Demo użytkownik **Damian Zieliński** zawsze odrzuca zapis – kliknij jego gwiazdkę, żeby zobaczyć rollback i komunikat."
+        },
+        {
+          "type": "subheading",
+          "text": "c) Debounce i anulowanie nieaktualnych żądań"
+        },
+        {
+          "type": "code",
+          "code": "queryFlow\n    .drop(1)\n    .debounce(SEARCH_DEBOUNCE_MS)\n    .distinctUntilChanged()\n    .collect { loadRequests.trySend(LoadRequest(it, isRefresh = false)) }\n\n// collectLatest anuluje poprzednie ładowanie, gdy przyjdzie nowe\nloadRequests.receiveAsFlow().collectLatest { performLoad(it) }",
+          "caption": "UsersViewModel.kt"
+        },
+        {
+          "type": "rule",
+          "text": "collectLatest chroni przed klasycznym bugiem wyszukiwarek: wynik starego zapytania nadpisujący nowszy."
+        },
+        {
+          "type": "subheading",
+          "text": "d) Stan pochodny liczony w State"
+        },
+        {
+          "type": "code",
+          "code": "val showEmptyState: Boolean\n    get() = !isLoading && error == null && users.isEmpty()"
+        },
+        {
+          "type": "paragraph",
+          "text": "Warunek „pusty ekran” jest jeden i testowalny bez UI. Nie da się go zapomnieć w jednym z trzech miejsc renderujących listę."
+        },
+        {
+          "type": "subheading",
+          "text": "e) Time travel"
+        },
+        {
+          "type": "paragraph",
+          "text": "Skoro każda zmiana to reduce(state, intent), historia par (intencja, stan) opisuje całą sesję. W zakładce Demo kliknij wpis na osi czasu – UI wróci dokładnie do tamtego stanu."
+        },
+        {
+          "type": "exercise",
+          "number": 2,
+          "text": "W Demo włącz „Symuluj błąd sieci”, odśwież listę, a potem cofnij się na osi czasu do stanu sprzed błędu."
+        }
+      ]
+    },
+    {
+      "id": "patterns",
+      "title": "3. MVP vs MVVM vs MVI",
+      "summary": "Ewolucja wzorców prezentacji i co realnie zmienia każdy krok",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Wszystkie te wzorce odpowiadają na to samo pytanie: **gdzie trzymać logikę ekranu, żeby nie wylądowała w Activity**. Różnią się tym, jak View dowiaduje się o zmianach."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Wzorzec",
+            "Komunikacja z View",
+            "Główny problem"
+          ],
+          "rows": [
+            [
+              "MVC",
+              "Controller ↔ View w obie strony",
+              "Activity robi wszystko"
+            ],
+            [
+              "MVP",
+              "Presenter woła metody View przez interfejs",
+              "Setki metod w interfejsie View"
+            ],
+            [
+              "MVVM",
+              "View obserwuje strumienie danych",
+              "Rozjeżdżające się, niezależne stany"
+            ],
+            [
+              "MVI",
+              "View renderuje jeden niemutowalny stan",
+              "Więcej boilerplate'u"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "MVC — punkt wyjścia"
+        },
+        {
+          "type": "paragraph",
+          "text": "Na Androidzie Activity było jednocześnie kontrolerem i widokiem. Efekt: pliki po 2000 linii, logika biznesowa spleciona z cyklem życia, testy tylko na urządzeniu."
+        },
+        {
+          "type": "subheading",
+          "text": "MVP — Presenter mówi View, co ma robić"
+        },
+        {
+          "type": "code",
+          "code": "interface UsersView {                       // View jest pasywne\n    fun showLoading()\n    fun hideLoading()\n    fun showUsers(users: List<User>)\n    fun showError(message: String)\n    fun showEmptyState()\n}\n\nclass UsersPresenter(private val repo: UserRepository) {\n    private var view: UsersView? = null     // ręczne zarządzanie referencją!\n\n    fun attach(view: UsersView) { this.view = view }\n    fun detach() { this.view = null }       // zapomnisz → wyciek pamięci\n\n    fun loadUsers(query: String) {\n        view?.showLoading()\n        scope.launch {\n            try {\n                val users = repo.getUsers(query)\n                view?.hideLoading()\n                if (users.isEmpty()) view?.showEmptyState()\n                else view?.showUsers(users)\n            } catch (e: Exception) {\n                view?.hideLoading()\n                view?.showError(e.message.orEmpty())\n            }\n        }\n    }\n}",
+          "caption": "Ten sam ekran w MVP"
+        },
+        {
+          "type": "paragraph",
+          "text": "**Zaleta:** logika wyszła z Activity i da się ją testować (podstawiasz fake View). **Wada:** presenter musi pamiętać o wywołaniu *każdej* kombinacji metod. Zapomnisz `hideLoading()` w jednej gałęzi i spinner zostaje na ekranie na zawsze."
+        },
+        {
+          "type": "rule",
+          "text": "Problem MVP: stan ekranu istnieje tylko jako historia wywołań metod. Nie da się go odczytać ani zserializować."
+        },
+        {
+          "type": "subheading",
+          "text": "MVVM — View obserwuje dane"
+        },
+        {
+          "type": "code",
+          "code": "class UsersViewModel(private val repo: UserRepository) : ViewModel() {\n    private val _users = MutableStateFlow<List<User>>(emptyList())\n    val users: StateFlow<List<User>> = _users\n\n    private val _isLoading = MutableStateFlow(false)   // stan #2\n    val isLoading: StateFlow<Boolean> = _isLoading\n\n    private val _error = MutableStateFlow<String?>(null)  // stan #3\n    val error: StateFlow<String?> = _error\n\n    fun loadUsers(query: String) {\n        _isLoading.value = true\n        viewModelScope.launch {\n            try {\n                _users.value = repo.getUsers(query)\n                _error.value = null\n            } catch (e: Exception) {\n                _error.value = e.message\n            } finally {\n                _isLoading.value = false\n            }\n        }\n    }\n\n    fun toggleFavorite(id: String) { /* mutuje _users po swojemu */ }\n    fun refresh() { /* ...i jeszcze raz to samo */ }\n}",
+          "caption": "Ten sam ekran w MVVM"
+        },
+        {
+          "type": "paragraph",
+          "text": "**Zaleta:** brak referencji do View, przeżywa obrót ekranu, świetnie łączy się z Compose. **Wada:** trzy niezależne strumienie mogą wejść w kombinację, której nigdy nie zaprojektowałeś — np. `isLoading = true` **i** widoczny błąd **i** stara lista naraz."
+        },
+        {
+          "type": "rule",
+          "text": "Problem MVVM: rozproszona mutacja. Każda publiczna metoda zmienia stan po swojemu, więc nie ma jednego miejsca, w którym widać wszystkie przejścia."
+        },
+        {
+          "type": "subheading",
+          "text": "MVI — jeden stan, jedno wejście, jedno miejsce mutacji"
+        },
+        {
+          "type": "code",
+          "code": "data class UsersState(                       // JEDEN stan\n    val query: String = \"\",\n    val users: List<User> = emptyList(),\n    val isLoading: Boolean = false,\n    val error: String? = null,\n) : MviState {\n    val showEmptyState: Boolean               // stan pochodny, nie osobne pole\n        get() = !isLoading && error == null && users.isEmpty()\n}\n\n// JEDNO wejście\nviewModel.dispatch(UsersIntent.Ui.QueryChanged(\"An\"))\n\n// JEDNO miejsce mutacji\nval UsersReducer = Reducer<UsersState, UsersIntent> { state, intent ->\n    when (intent) {\n        is Internal.LoadStarted   -> state.copy(isLoading = true, error = null)\n        is Internal.LoadSucceeded -> state.copy(isLoading = false, users = intent.users)\n        is Internal.LoadFailed    -> state.copy(isLoading = false, error = intent.message)\n        // ...\n    }\n}",
+          "caption": "Ten sam ekran w MVI (nasz projekt)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Niemożliwe kombinacje znikają, bo `LoadSucceeded` **zawsze** gasi loader i czyści błąd. Nie da się tego zapomnieć, bo to jedna linia w jednym miejscu."
+        },
+        {
+          "type": "subheading",
+          "text": "Porównanie w trzech wymiarach"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Kryterium",
+            "MVP",
+            "MVVM",
+            "MVI"
+          ],
+          "rows": [
+            [
+              "Ile miejsc mutuje stan",
+              "n metod View",
+              "n metod VM",
+              "1 (reducer)"
+            ],
+            [
+              "Stan da się odczytać",
+              "nie",
+              "częściowo",
+              "tak, w całości"
+            ],
+            [
+              "Testy logiki ekranu",
+              "fake View",
+              "asercje na kilku flow",
+              "czysta funkcja"
+            ],
+            [
+              "Time travel / replay",
+              "niemożliwe",
+              "trudne",
+              "wbudowane"
+            ],
+            [
+              "Ilość boilerplate'u",
+              "średnia",
+              "mała",
+              "największa"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Kiedy NIE używać MVI"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Ekran statyczny (regulamin, „o aplikacji”) – MVI to zbędny narzut.",
+            "Formularz z 30 polami – rozważ jeden Intent z całym modelem formularza, zamiast 30 osobnych intencji.",
+            "Zespół, który nie ma nawyku pisania testów – największy zysk MVI (testowalność) zostanie niewykorzystany."
+          ]
+        },
+        {
+          "type": "rule",
+          "text": "MVI to nie „lepsze MVVM”, tylko MVVM z narzuconą dyscypliną: jeden stan, jedno wejście, jedna funkcja przejścia."
+        },
+        {
+          "type": "exercise",
+          "number": 3,
+          "text": "Weź `UsersViewModel` z tego projektu i wypisz na kartce, ile miejsc mutuje stan. Potem zrób to samo dla dowolnego ViewModelu MVVM ze swojej pracy."
+        }
+      ]
+    },
+    {
+      "id": "clean-architecture",
+      "title": "4. Clean Architecture – teoria",
+      "summary": "Reguła zależności, warstwy, porty i adaptery",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Clean Architecture (Robert C. Martin) to sposób podziału kodu na warstwy ułożone koncentrycznie. Cały wzorzec sprowadza się do jednej zasady."
+        },
+        {
+          "type": "rule",
+          "text": "Reguła zależności: kod źródłowy może zależeć wyłącznie do wewnątrz. Warstwa wewnętrzna nie wie nic o zewnętrznej."
+        },
+        {
+          "type": "subheading",
+          "text": "Warstwy od środka na zewnątrz"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Warstwa",
+            "Co zawiera",
+            "Czego NIE wolno"
+          ],
+          "rows": [
+            [
+              "Domain (model)",
+              "Encje, reguły biznesowe",
+              "Importów z data i presentation"
+            ],
+            [
+              "Domain (use case)",
+              "Pojedyncze operacje biznesowe",
+              "Znajomości Ktora, Room, Compose"
+            ],
+            [
+              "Data",
+              "Implementacje repozytoriów, API, baza",
+              "Wystawiania DTO na zewnątrz"
+            ],
+            [
+              "Presentation",
+              "ViewModel, State, UI",
+              "Wołania API z pominięciem domeny"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Porty i adaptery"
+        },
+        {
+          "type": "paragraph",
+          "text": "Domena definiuje **port** – interfejs opisujący, czego potrzebuje. Warstwa data dostarcza **adapter** – konkretną implementację. To jest Dependency Inversion Principle (litera D w SOLID)."
+        },
+        {
+          "type": "code",
+          "code": "interface UserRepository {\n    suspend fun getUsers(query: String): List<User>\n    suspend fun setFavorite(userId: String, favorite: Boolean): Boolean\n}",
+          "caption": "Port – domain/repository/UserRepository.kt"
+        },
+        {
+          "type": "code",
+          "code": "class InMemoryUserRepository : UserRepository, NetworkFailureSwitch {\n    override suspend fun getUsers(query: String): List<User> { /* udawana sieć */ }\n    override suspend fun setFavorite(userId: String, favorite: Boolean) { /* ... */ }\n}",
+          "caption": "Adapter – data/repository/InMemoryUserRepository.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Strzałka zależności wskazuje **do środka**: to `data` wie o `domain`, nigdy odwrotnie. Dlatego podmiana źródła danych nie rusza reguł biznesowych."
+        },
+        {
+          "type": "subheading",
+          "text": "Po co to wszystko? Trzy konkretne zyski"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Wymienialność: zamiana fake'a na Ktora to zmiana jednej linii w module DI.",
+            "Testowalność: reguły biznesowe testujesz bez sieci, bazy i UI.",
+            "Współdzielenie: ta sama domena działa na Androidzie i iOS bez zmian."
+          ]
+        },
+        {
+          "type": "rule",
+          "text": "Clean Architecture to nie liczba folderów, tylko kierunek strzałek zależności. Możesz mieć 20 pakietów i zero czystej architektury."
+        }
+      ]
+    },
+    {
+      "id": "clean-architecture-project",
+      "title": "5. Clean Architecture w tym projekcie",
+      "summary": "Konkretne pliki, przepływ żądania i typowe błędy",
+      "blocks": [
+        {
+          "type": "code",
+          "code": "core/mvi/          framework MVI (niezależny od feature'a)\ndomain/\n  model/           User – czysty Kotlin\n  repository/      PORTY: UserRepository, NetworkFailureSwitch\n  usecase/         SearchUsersUseCase, SetFavoriteUseCase\ndata/repository/   ADAPTER: InMemoryUserRepository\npresentation/\n  users/           Contract, Reducer, ViewModel, Screen\n  learn/           ten ekran nauki\ndi/                moduły Koina",
+          "caption": "Struktura shared/src/commonMain"
+        },
+        {
+          "type": "subheading",
+          "text": "Dlaczego use case, skoro to jedna linia?"
+        },
+        {
+          "type": "code",
+          "code": "class SearchUsersUseCase(private val repository: UserRepository) {\n    suspend operator fun invoke(query: String): List<User> =\n        repository.getUsers(query.trim())\n            .sortedWith(compareByDescending<User> { it.isFavorite }.thenBy { it.name })\n}",
+          "caption": "domain/usecase/SearchUsersUseCase.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Reguła „ulubieni na górze, potem alfabetycznie” jest **biznesowa**, nie prezentacyjna. Gdyby siedziała w ViewModelu, nie dałoby się jej użyć w widżecie ani na iOS bez kopiowania."
+        },
+        {
+          "type": "subheading",
+          "text": "Przepływ jednego żądania przez warstwy"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "1. UI: dispatch(Ui.QueryChanged(\"An\")) — presentation",
+            "2. Reducer: state.copy(query = \"An\") — presentation, czysta funkcja",
+            "3. ViewModel: debounce → wywołanie use case — presentation",
+            "4. SearchUsersUseCase: reguła sortowania — domain",
+            "5. UserRepository (port) → InMemoryUserRepository (adapter) — data",
+            "6. Wynik wraca jako Internal.LoadSucceeded → reducer → nowy stan"
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Typowe błędy, których tu unikamy"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Antywzorzec",
+            "Dlaczego boli"
+          ],
+          "rows": [
+            [
+              "ViewModel woła Ktora wprost",
+              "Reguł biznesowych nie da się przetestować ani współdzielić"
+            ],
+            [
+              "DTO z API używane w UI",
+              "Zmiana pola w API wymusza zmiany w całej aplikacji"
+            ],
+            [
+              "Interfejs repozytorium w warstwie data",
+              "Odwraca kierunek zależności – domena zaczyna zależeć od data"
+            ],
+            [
+              "Logika filtrowania w Compose",
+              "Nietestowalna bez UI i łatwa do zdublowania"
+            ]
+          ]
+        },
+        {
+          "type": "exercise",
+          "number": 4,
+          "text": "Sprawdź w kodzie: czy którykolwiek plik w domain/ importuje coś z data/ lub presentation/? (Odpowiedź: nie – i to jest cały sens.)"
+        },
+        {
+          "type": "exercise",
+          "number": 5,
+          "text": "Napisz implementację UserRepository opartą o Ktora i podmień ją w DataModule. Policz, ile plików poza data/ i di/ musiałeś zmienić."
+        }
+      ]
+    },
+    {
+      "id": "coroutines",
+      "title": "6. Korutyny i Flow",
+      "summary": "Scope, dispatcher, anulowanie, StateFlow vs SharedFlow, zimne i gorące strumienie",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Korutyna to **wznawialne obliczenie**: może się zawiesić w punkcie `suspend` i wznowić później, nie blokując wątku. Dzięki temu tysiąc czekających korutyn kosztuje ułamek tego, co tysiąc wątków."
+        },
+        {
+          "type": "rule",
+          "text": "Współbieżność ≠ równoległość. Korutyny dają współbieżność nawet na jednym wątku — i właśnie dlatego wyścigi zdarzają się bez wielowątkowości."
+        },
+        {
+          "type": "subheading",
+          "text": "suspend — co to naprawdę znaczy"
+        },
+        {
+          "type": "code",
+          "code": "suspend fun getUsers(query: String): List<User>\n\n// Kompilator zamienia to na coś w rodzaju:\nfun getUsers(query: String, continuation: Continuation<List<User>>): Any",
+          "caption": "Continuation Passing Style pod spodem"
+        },
+        {
+          "type": "paragraph",
+          "text": "Funkcja `suspend` może być wywołana tylko z innej funkcji `suspend` albo z korutyny. To nie jest ograniczenie — to gwarancja, że nie zawiesisz przypadkiem kodu, który się do tego nie nadaje."
+        },
+        {
+          "type": "subheading",
+          "text": "Structured concurrency — najważniejsza idea"
+        },
+        {
+          "type": "paragraph",
+          "text": "Każda korutyna ma **rodzica**. Anulowanie rodzica anuluje dzieci, a błąd dziecka propaguje się w górę. Nie ma sierot działających w tle po zamknięciu ekranu."
+        },
+        {
+          "type": "code",
+          "code": "class UsersViewModel : ViewModel() {\n    fun load() {\n        viewModelScope.launch {      // scope powiązany z cyklem życia\n            val users = repository.getUsers(\"\")\n        }\n    }\n}\n// onCleared() → viewModelScope anulowany → korutyna anulowana automatycznie",
+          "caption": "viewModelScope w tym projekcie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Scope",
+            "Kiedy używać",
+            "Kiedy anulowany"
+          ],
+          "rows": [
+            [
+              "viewModelScope",
+              "Praca związana z ekranem",
+              "W onCleared()"
+            ],
+            [
+              "lifecycleScope",
+              "Praca związana z Activity/Fragment",
+              "W onDestroy()"
+            ],
+            [
+              "coroutineScope { }",
+              "Grupowanie zadań w funkcji suspend",
+              "Gdy funkcja się kończy"
+            ],
+            [
+              "GlobalScope",
+              "Prawie nigdy",
+              "Nigdy — to wyciek"
+            ]
+          ]
+        },
+        {
+          "type": "rule",
+          "text": "GlobalScope to odpowiednik `new Thread()` bez referencji. Jeśli widzisz go na review, prawie zawsze jest to błąd."
+        },
+        {
+          "type": "subheading",
+          "text": "launch vs async"
+        },
+        {
+          "type": "code",
+          "code": "// launch — odpalasz i zapominasz, zwraca Job\nval job = scope.launch { repository.setFavorite(id, true) }\n\n// async — potrzebujesz wyniku, zwraca Deferred<T>\ncoroutineScope {\n    val users = async { repository.getUsers(\"\") }\n    val config = async { repository.getConfig() }\n    render(users.await(), config.await())   // oba biegną RÓWNOLEGLE\n}"
+        },
+        {
+          "type": "paragraph",
+          "text": "Reguła: **`launch` gdy nie potrzebujesz wyniku, `async` gdy potrzebujesz**. Jeśli robisz `async { }.await()` od razu w następnej linii, to niczego nie zrównoleglasz — użyj zwykłego wywołania."
+        },
+        {
+          "type": "subheading",
+          "text": "Dispatchery — gdzie kod faktycznie działa"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Dispatcher",
+            "Do czego",
+            "Rozmiar puli"
+          ],
+          "rows": [
+            [
+              "Main",
+              "UI, aktualizacja stanu",
+              "1 wątek"
+            ],
+            [
+              "Default",
+              "Obliczenia (sortowanie, parsowanie)",
+              "Liczba rdzeni"
+            ],
+            [
+              "IO",
+              "Sieć, dysk, baza",
+              "64+ wątków"
+            ],
+            [
+              "Unconfined",
+              "Testy, przypadki specjalne",
+              "—"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "W dobrze napisanym kodzie **funkcja suspend sama dba o swój dispatcher** (`withContext(Dispatchers.IO)` w środku repozytorium). ViewModel nie powinien wiedzieć, że coś jest operacją dyskową."
+        },
+        {
+          "type": "rule",
+          "text": "Zasada: suspend function powinna być bezpieczna do wywołania z Dispatchers.Main. Jeśli nie jest — to błąd tej funkcji, nie jej wywołania."
+        },
+        {
+          "type": "subheading",
+          "text": "Anulowanie jest kooperacyjne"
+        },
+        {
+          "type": "code",
+          "code": "// ŹLE — pętla nie sprawdza anulowania, korutyna nie da się zatrzymać\nwhile (true) { heavyComputation() }\n\n// DOBRZE — ensureActive() / yield() / dowolna funkcja suspend sprawdza anulowanie\nwhile (isActive) { heavyComputation(); yield() }"
+        },
+        {
+          "type": "code",
+          "code": "try {\n    repository.getUsers(query)\n} catch (cancellation: CancellationException) {\n    throw cancellation          // NIGDY nie połykaj anulowania\n} catch (error: Exception) {\n    dispatch(LoadFailed(error.message))\n}",
+          "caption": "Ten wzorzec jest w UsersViewModel"
+        },
+        {
+          "type": "rule",
+          "text": "CancellationException to nie błąd domenowy, tylko sygnał sterujący. Połknięcie go rozbija structured concurrency — rodzic uzna, że dziecko zakończyło się normalnie."
+        },
+        {
+          "type": "subheading",
+          "text": "Flow — strumień wartości"
+        },
+        {
+          "type": "paragraph",
+          "text": "`Flow` to **zimny** strumień: nic się nie dzieje, dopóki ktoś nie zawoła `collect`. Każdy kolektor uruchamia własne wykonanie."
+        },
+        {
+          "type": "code",
+          "code": "val numbers = flow {\n    println(\"start\")     // wykona się DOPIERO przy collect\n    emit(1)\n    emit(2)\n}\n\nnumbers.collect { }      // wypisze \"start\"\nnumbers.collect { }      // wypisze \"start\" DRUGI raz"
+        },
+        {
+          "type": "subheading",
+          "text": "Zimne vs gorące — tabela decyzyjna"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Typ",
+            "Zimny/gorący",
+            "Zastosowanie"
+          ],
+          "rows": [
+            [
+              "Flow",
+              "zimny",
+              "Jednorazowe zapytanie, transformacje"
+            ],
+            [
+              "StateFlow",
+              "gorący",
+              "Stan ekranu — zawsze ma wartość"
+            ],
+            [
+              "SharedFlow",
+              "gorący",
+              "Zdarzenia dla wielu odbiorców"
+            ],
+            [
+              "Channel",
+              "gorący",
+              "Zdarzenia dla jednego odbiorcy"
+            ]
+          ]
+        },
+        {
+          "type": "code",
+          "code": "// Stan ekranu — StateFlow: ma wartość początkową, dedupliku­je, zawsze aktualny\nprivate val _state = MutableStateFlow(UsersState())\nval state: StateFlow<UsersState> = _state.asStateFlow()\n\n// Efekty jednorazowe — Channel: nic nie ginie, nic się nie dubluje\nprivate val _effects = Channel<UsersEffect>(Channel.BUFFERED)\nval effects: Flow<UsersEffect> = _effects.receiveAsFlow()",
+          "caption": "MviStore.kt — dokładnie ten podział"
+        },
+        {
+          "type": "rule",
+          "text": "Efektów jednorazowych nie trzymaj w StateFlow. Stan jest odtwarzalny, więc po obrocie ekranu snackbar pokazałby się drugi raz."
+        },
+        {
+          "type": "subheading",
+          "text": "Operatory, które musisz znać"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**map / filter** — transformacja, jak w kolekcjach.",
+            "**debounce(ms)** — czeka na ciszę; wyszukiwarka bez tego robi zapytanie na literę.",
+            "**distinctUntilChanged()** — pomija powtórzenia z rzędu.",
+            "**flatMapLatest** — anuluje poprzedni strumień, gdy przyjdzie nowa wartość.",
+            "**collectLatest** — anuluje poprzednie przetwarzanie, gdy przyjdzie nowa wartość.",
+            "**combine** — łączy kilka strumieni w jeden.",
+            "**catch** — obsługa błędów w strumieniu, bez try/catch wokół collect."
+          ]
+        },
+        {
+          "type": "code",
+          "code": "queryFlow\n    .drop(1)                       // pomiń wartość początkową\n    .debounce(350)                 // poczekaj, aż użytkownik przestanie pisać\n    .distinctUntilChanged()        // to samo zapytanie? nie powtarzaj\n    .collect { loadRequests.trySend(it) }\n\nloadRequests.receiveAsFlow()\n    .collectLatest { performLoad(it) }   // nowe żądanie anuluje stare",
+          "caption": "UsersViewModel — pełny łańcuch wyszukiwarki"
+        },
+        {
+          "type": "subheading",
+          "text": "Trzy najczęstsze błędy"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Błąd",
+            "Skutek",
+            "Poprawnie"
+          ],
+          "rows": [
+            [
+              "_state.value = _state.value + 1",
+              "Utracone aktualizacje",
+              "_state.update { it + 1 }"
+            ],
+            [
+              "Połknięty CancellationException",
+              "Rozbita structured concurrency",
+              "Przepuść go dalej"
+            ],
+            [
+              "collect w onCreate bez scope",
+              "Wyciek po zamknięciu ekranu",
+              "repeatOnLifecycle / collectAsState"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Pierwszy z nich możesz zobaczyć na żywo w zakładce **Sync** — scenariusz „StateFlow: .value = zamiast update {}”."
+        },
+        {
+          "type": "exercise",
+          "number": 8,
+          "text": "Otwórz zakładkę Sync i uruchom scenariusz „Utracona aktualizacja”. Potem otwórz CoroutineConcurrencyLab.kt i zobacz, że wyścig powoduje jedno `yield()`."
+        },
+        {
+          "type": "exercise",
+          "number": 9,
+          "text": "Dodaj do UsersViewModel operator `onEach { }` logujący każde zapytanie i sprawdź w konsoli, ile zapytań powstaje przy szybkim pisaniu."
+        }
+      ]
+    },
+    {
+      "id": "rxjava",
+      "title": "7. RxJava vs Kotlin Flow",
+      "summary": "Słownik pojęć, migracja i dlaczego Flow wygrał na Androidzie",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "RxJava przez lata była standardem asynchroniczności na Androidzie. Warto ją znać z dwóch powodów: **utrzymujesz starszy kod** albo **czytasz starsze biblioteki**. Pojęcia są niemal jeden do jednego z Flow."
+        },
+        {
+          "type": "subheading",
+          "text": "Słownik: typ w Rx → odpowiednik w Kotlinie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "RxJava",
+            "Kotlin",
+            "Znaczenie"
+          ],
+          "rows": [
+            [
+              "Single<T>",
+              "suspend fun (): T",
+              "Dokładnie jedna wartość albo błąd"
+            ],
+            [
+              "Maybe<T>",
+              "suspend fun (): T?",
+              "Zero lub jedna wartość"
+            ],
+            [
+              "Completable",
+              "suspend fun (): Unit",
+              "Tylko sygnał zakończenia"
+            ],
+            [
+              "Observable<T>",
+              "Flow<T>",
+              "Strumień bez backpressure"
+            ],
+            [
+              "Flowable<T>",
+              "Flow<T>",
+              "Strumień z backpressure"
+            ],
+            [
+              "BehaviorSubject<T>",
+              "MutableStateFlow<T>",
+              "Ostatnia wartość + nowe"
+            ],
+            [
+              "PublishSubject<T>",
+              "MutableSharedFlow<T>",
+              "Tylko nowe wartości"
+            ],
+            [
+              "Disposable",
+              "Job / CoroutineScope",
+              "Uchwyt do anulowania"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Ten sam kod w obu światach"
+        },
+        {
+          "type": "code",
+          "code": "class UsersPresenter(private val repo: UserRepository) {\n    private val disposables = CompositeDisposable()      // ręczne sprzątanie\n\n    fun search(queries: Observable<String>) {\n        disposables += queries\n            .debounce(350, TimeUnit.MILLISECONDS)\n            .distinctUntilChanged()\n            .switchMap { query -> repo.getUsers(query).toObservable() }\n            .subscribeOn(Schedulers.io())\n            .observeOn(AndroidSchedulers.mainThread())\n            .subscribe(\n                { users -> view.showUsers(users) },\n                { error -> view.showError(error.message) },\n            )\n    }\n\n    fun onDestroy() { disposables.clear() }              // zapomnisz → wyciek\n}",
+          "caption": "RxJava"
+        },
+        {
+          "type": "code",
+          "code": "class UsersViewModel(private val searchUsers: SearchUsersUseCase) : ViewModel() {\n    fun search(queries: Flow<String>) {\n        viewModelScope.launch {                          // scope sprząta sam\n            queries\n                .debounce(350)\n                .distinctUntilChanged()\n                .flatMapLatest { query -> flow { emit(searchUsers(query)) } }\n                .catch { error -> dispatch(LoadFailed(error.message)) }\n                .collect { users -> dispatch(LoadSucceeded(users)) }\n        }\n    }\n}",
+          "caption": "Kotlin Flow — odpowiednik"
+        },
+        {
+          "type": "subheading",
+          "text": "Operatory: nazwy się różnią, idea nie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "RxJava",
+            "Flow",
+            "Co robi"
+          ],
+          "rows": [
+            [
+              "switchMap",
+              "flatMapLatest",
+              "Anuluje poprzedni strumień"
+            ],
+            [
+              "flatMap",
+              "flatMapMerge",
+              "Łączy równolegle"
+            ],
+            [
+              "concatMap",
+              "flatMapConcat",
+              "Łączy po kolei"
+            ],
+            [
+              "doOnNext",
+              "onEach",
+              "Efekt uboczny na wartości"
+            ],
+            [
+              "onErrorReturn",
+              "catch { emit(...) }",
+              "Wartość zastępcza przy błędzie"
+            ],
+            [
+              "subscribeOn / observeOn",
+              "flowOn / withContext",
+              "Zmiana wątku"
+            ],
+            [
+              "zip / combineLatest",
+              "zip / combine",
+              "Łączenie strumieni"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Dlaczego Flow wygrał na Androidzie"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Structured concurrency** — anulowanie dziedziczy się ze scope'a. W Rx `Disposable` trzeba pamiętać ręcznie; zapomniany `dispose()` to klasyczny wyciek.",
+            "**Brak `subscribeOn`/`observeOn`** — kontekst jest częścią korutyny, więc nie da się przypadkiem wykonać UI na wątku IO.",
+            "**Czytelność** — `try/catch`, pętle i `if` działają normalnie, bez zamiany na operatory.",
+            "**Kotlin Multiplatform** — Flow działa na iOS, RxJava nie (jest biblioteką JVM).",
+            "**Mniejszy narzut** — brak ogromnej hierarchii typów i osobnego API dla każdego przypadku."
+          ]
+        },
+        {
+          "type": "rule",
+          "text": "Rx nie jest „gorszy” — jest bogatszy operatorowo i starszy. Na Androidzie przegrał głównie przez ręczne zarządzanie subskrypcjami i brak wsparcia dla KMP."
+        },
+        {
+          "type": "subheading",
+          "text": "Czego Rx ma więcej"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Backpressure jako pierwszorzędne pojęcie (`Flowable` ze strategiami).",
+            "Bardzo bogaty zestaw operatorów czasowych (`window`, `buffer`, `throttleFirst`).",
+            "Dojrzały `TestScheduler` i marble tests."
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "W Flow część z tego trzeba złożyć samodzielnie z `buffer()`, `conflate()` i `sample()` — ale w typowej aplikacji mobilnej rzadko jest to potrzebne."
+        },
+        {
+          "type": "subheading",
+          "text": "Migracja krok po kroku"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Dodaj `kotlinx-coroutines-rx3` — daje mosty w obie strony.",
+            "`single.await()` zamienia `Single<T>` na wartość w korutynie.",
+            "`observable.asFlow()` zamienia strumień Rx na Flow.",
+            "`flow.asObservable()` w drugą stronę, gdy stary kod tego wymaga.",
+            "Migruj **od warstwy prezentacji w dół** — najpierw ViewModel, potem repozytoria.",
+            "Nie migruj wszystkiego naraz; mosty pozwalają na współistnienie."
+          ]
+        },
+        {
+          "type": "code",
+          "code": "// Most: stare repozytorium Rx, nowy ViewModel na korutynach\nsuspend fun getUsers(query: String): List<User> =\n    legacyRepository.getUsers(query).await()      // Single<List<User>> → List<User>",
+          "caption": "kotlinx-coroutines-rx3"
+        },
+        {
+          "type": "exercise",
+          "number": 10,
+          "text": "Weź łańcuch z UsersViewModel (debounce + collectLatest) i napisz jego odpowiednik w RxJava na kartce. Zwróć uwagę, ile miejsc wymaga ręcznego sprzątania."
+        }
+      ]
+    },
+    {
+      "id": "solid",
+      "title": "8. SOLID w praktyce",
+      "summary": "Pięć zasad na przykładach z tego projektu — i co się psuje bez nich",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "SOLID to pięć zasad projektowania klas. Nie są dogmatem — są **narzędziem diagnostycznym**: gdy kod trudno zmienić lub przetestować, zwykle łamie którąś z nich."
+        },
+        {
+          "type": "subheading",
+          "text": "S — Single Responsibility (jedna odpowiedzialność)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Klasa powinna mieć **jeden powód do zmiany**. Nie „robić jedną rzecz”, tylko odpowiadać przed jednym interesariuszem."
+        },
+        {
+          "type": "code",
+          "code": "// ŹLE — trzy powody do zmiany: format JSON, źródło pliku, polityka cache\nclass LessonRepository {\n    fun load(): List<Lesson> { /* czyta plik, parsuje JSON, cache'uje */ }\n}\n\n// DOBRZE — podział z tego projektu\nfun interface LessonsSource { suspend fun readContent(): String }   // SKĄD\nclass LessonsJsonParser { fun parse(content: String): List<Lesson> } // JAK zrozumieć\nclass LessonJsonRepository(source, parser) : LessonRepository        // spina + cache",
+          "caption": "data/lesson/ i data/repository/"
+        },
+        {
+          "type": "rule",
+          "text": "Test sprawdzający: czy potrafisz opisać klasę jednym zdaniem bez słowa „i”? Jeśli nie — ma za dużo odpowiedzialności."
+        },
+        {
+          "type": "subheading",
+          "text": "O — Open/Closed (otwarte na rozszerzenie, zamknięte na modyfikację)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Nową funkcjonalność dodawaj **dopisując kod**, nie przepisując istniejący."
+        },
+        {
+          "type": "code",
+          "code": "sealed interface Block {\n    data class Paragraph(val text: String) : Block\n    data class Code(val code: String, val caption: String?) : Block\n    // dodanie nowego typu bloku = dopisanie klasy + gałęzi w when\n}",
+          "caption": "domain/model/Lesson.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Uwaga na niuans: `sealed` **celowo** wymusza aktualizację `when`. To nie łamanie zasady, tylko świadomy wybór — kompilator wskaże wszystkie miejsca, zamiast pozwolić na cichy błąd w runtime."
+        },
+        {
+          "type": "subheading",
+          "text": "L — Liskov Substitution (podstawialność)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Podtyp musi dać się użyć wszędzie tam, gdzie typ bazowy — **bez zaskoczeń**."
+        },
+        {
+          "type": "code",
+          "code": "// ŹLE — implementacja łamie kontrakt, rzucając tam, gdzie interfejs tego nie przewiduje\nclass CachedUserRepository : UserRepository {\n    override suspend fun setFavorite(id: String, fav: Boolean): Boolean =\n        throw UnsupportedOperationException(\"tylko do odczytu\")\n}\n\n// DOBRZE — testy w tym projekcie podstawiają TestRepository i wszystko działa\nprivate class TestRepository : UserRepository, NetworkFailureSwitch { /* ... */ }",
+          "caption": "UsersViewModelTest.kt"
+        },
+        {
+          "type": "rule",
+          "text": "Jeśli podstawienie implementacji wymaga zmiany kodu klienta albo dodania `if (repo is X)`, zasada jest złamana."
+        },
+        {
+          "type": "subheading",
+          "text": "I — Interface Segregation (segregacja interfejsów)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Lepiej kilka wąskich interfejsów niż jeden szeroki. Klient nie powinien zależeć od metod, których nie używa."
+        },
+        {
+          "type": "code",
+          "code": "// Dwa wąskie porty zamiast jednego szerokiego\ninterface UserRepository {\n    suspend fun getUsers(query: String): List<User>\n    suspend fun setFavorite(userId: String, favorite: Boolean): Boolean\n}\n\ninterface NetworkFailureSwitch {       // tylko na potrzeby trybu demo\n    var failNextLoad: Boolean\n}\n\n// Jedna instancja, dwa kontrakty — DataModule.kt\nsingle { InMemoryUserRepository() } bind UserRepository::class\nsingle<NetworkFailureSwitch> { get<InMemoryUserRepository>() }",
+          "caption": "di/DataModule.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Dzięki temu produkcyjna implementacja sieciowa nie musi wiedzieć nic o przełączniku awarii — po prostu nie implementuje tego interfejsu."
+        },
+        {
+          "type": "subheading",
+          "text": "D — Dependency Inversion (odwrócenie zależności)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Moduły wysokopoziomowe nie powinny zależeć od niskopoziomowych. Oba mają zależeć od **abstrakcji**."
+        },
+        {
+          "type": "code",
+          "code": "// domain/repository/UserRepository.kt — abstrakcja NALEŻY do domeny\ninterface UserRepository { suspend fun getUsers(query: String): List<User> }\n\n// data/repository/InMemoryUserRepository.kt — implementacja zależy od domeny\nclass InMemoryUserRepository : UserRepository { /* ... */ }\n\n// domain/usecase — wysoki poziom zna tylko interfejs\nclass SearchUsersUseCase(private val repository: UserRepository)"
+        },
+        {
+          "type": "rule",
+          "text": "Kluczowe: interfejs leży w `domain`, nie w `data`. Gdyby leżał w `data`, strzałka zależności odwróciłaby się i domena zaczęłaby zależeć od szczegółu implementacyjnego."
+        },
+        {
+          "type": "subheading",
+          "text": "SOLID a testowalność — co daje każda zasada"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Zasada",
+            "Objaw złamania",
+            "Zysk z przestrzegania"
+          ],
+          "rows": [
+            [
+              "SRP",
+              "Test wymaga pół świata w setupie",
+              "Mały, czytelny setup"
+            ],
+            [
+              "OCP",
+              "Każda zmiana dotyka tych samych plików",
+              "Zmiany lokalne"
+            ],
+            [
+              "LSP",
+              "if (repo is Fake) w kodzie produkcyjnym",
+              "Wymienne implementacje"
+            ],
+            [
+              "ISP",
+              "Fake musi implementować 20 metod",
+              "Fake ma 2 metody"
+            ],
+            [
+              "DIP",
+              "Test potrzebuje sieci albo bazy",
+              "Test bez I/O"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Kiedy świadomie łamać"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Prototyp lub spike, który i tak wyrzucisz.",
+            "Przedwczesna abstrakcja — interfejs z jedną implementacją „na wszelki wypadek” to koszt bez zysku.",
+            "Nadgorliwe SRP prowadzi do klas z jedną metodą i tysiąca plików; czytelność jest ważniejsza od czystości."
+          ]
+        },
+        {
+          "type": "rule",
+          "text": "SOLID służy zmienialności kodu. Jeśli zastosowanie zasady utrudnia zrozumienie kodu, a nic nie ułatwia — nie stosuj jej."
+        },
+        {
+          "type": "exercise",
+          "number": 11,
+          "text": "Znajdź w projekcie klasę InMemoryUserRepository i wypisz, ile ma powodów do zmiany. Zaproponuj podział, gdyby doszło do niej pobieranie z sieci."
+        },
+        {
+          "type": "exercise",
+          "number": 12,
+          "text": "Dodaj nowy typ bloku treści (np. Quote) i policz, ile plików musiałeś zmienić. To praktyczny pomiar Open/Closed."
+        }
+      ]
+    },
+    {
+      "id": "di",
+      "title": "9. Dependency Injection (Koin)",
+      "summary": "Trzy moduły = trzy warstwy, scope ViewModelu",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "DI to miejsce, w którym warstwy się spotykają – tzw. composition root. Każda warstwa ma własny moduł."
+        },
+        {
+          "type": "code",
+          "code": "val dataModule = module {\n    single { InMemoryUserRepository() } bind UserRepository::class\n    single<NetworkFailureSwitch> { get<InMemoryUserRepository>() }\n}",
+          "caption": "di/DataModule.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Jedna instancja jest zarejestrowana pod dwoma wąskimi interfejsami. Reszta aplikacji nigdy nie widzi klasy konkretnej – to Interface Segregation Principle w konfiguracji."
+        },
+        {
+          "type": "code",
+          "code": "val domainModule = module {\n    factory { SearchUsersUseCase(get()) }   // bezstanowe → factory\n    factory { SetFavoriteUseCase(get()) }\n}\n\nval presentationModule = module {\n    viewModel { UsersViewModel(get(), get(), get()) }\n}",
+          "caption": "di/DomainModule.kt i PresentationModule.kt"
+        },
+        {
+          "type": "rule",
+          "text": "viewModel { } jest istotne dla MVI: gdyby store powstawał na nowo przy każdej rekompozycji, tracilibyśmy stan i oś czasu."
+        },
+        {
+          "type": "paragraph",
+          "text": "Graf zależności też jest kodem i też może się zepsuć – dlatego **KoinModulesTest** sprawdza, czy da się go rozwiązać. Brakująca definicja wysypie test, a nie użytkownika."
+        }
+      ]
+    },
+    {
+      "id": "kmp",
+      "title": "10. Kotlin Multiplatform",
+      "summary": "Source sety, targety, model pamięci i ile warto współdzielić",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "KMP współdzieli **logikę**, niekoniecznie UI. To rozróżnienie jest sednem: ryzykowną i złożoną częścią aplikacji jest logika biznesowa i to ona przestaje być pisana dwa razy."
+        },
+        {
+          "type": "rule",
+          "text": "KMP to nie „napisz raz, uruchom wszędzie”. To „współdziel to, co warto, zostań natywny tam, gdzie to ma znaczenie”."
+        },
+        {
+          "type": "subheading",
+          "text": "Source sety: kto co widzi"
+        },
+        {
+          "type": "code",
+          "code": "shared/src/\n├─ commonMain/    każdy target — tylko stdlib i biblioteki multiplatformowe\n├─ androidMain/   widzi commonMain + Android SDK\n└─ iosMain/       widzi commonMain + frameworki Apple",
+          "caption": "Hierarchia w tym projekcie"
+        },
+        {
+          "type": "paragraph",
+          "text": "`commonMain` kompiluje się dla każdego targetu, więc może używać wyłącznie API dostępnego wszędzie. Dlatego nie ma tam `java.io.File`, `Context` ani `java.time.LocalDate` — to typy JVM albo Androida."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Zamiast",
+            "Użyj"
+          ],
+          "rows": [
+            [
+              "java.time",
+              "kotlinx-datetime"
+            ],
+            [
+              "Gson / Jackson",
+              "kotlinx.serialization"
+            ],
+            [
+              "Retrofit / OkHttp",
+              "Ktor Client"
+            ],
+            [
+              "java.io",
+              "okio"
+            ],
+            [
+              "Context, File",
+              "portu z implementacją per platforma"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Ile współdzielić"
+        },
+        {
+          "type": "paragraph",
+          "text": "Współdzielenie nie jest zero-jedynkowe. Każda warstwa to osobna decyzja, a zysk maleje w miarę wychodzenia na zewnątrz."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Warstwa",
+            "Warto współdzielić?",
+            "Dlaczego"
+          ],
+          "rows": [
+            [
+              "Domena (modele, use case'y)",
+              "prawie zawsze",
+              "Czysta logika, największy zysk"
+            ],
+            [
+              "Dane (repozytoria, parsowanie)",
+              "zwykle tak",
+              "Złożone, a błędy bolą wszędzie"
+            ],
+            [
+              "Prezentacja (stan, reducery)",
+              "często",
+              "Testowalna logika; MVI czyni ją niezależną od platformy"
+            ],
+            [
+              "UI",
+              "kwestia oceny",
+              "Compose Multiplatform działa, natywne UI to nadal ważny wybór"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Wiele zespołów współdzieli wszystko poza UI i zostaje przy SwiftUI na iOS. To pełnoprawna architektura, nie półśrodek — i dokładnie dlatego domena nie może zależeć od Compose."
+        },
+        {
+          "type": "subheading",
+          "text": "Model pamięci: bariera, której już nie ma"
+        },
+        {
+          "type": "paragraph",
+          "text": "Kotlin/Native wymagał kiedyś `freeze()` przed współdzieleniem obiektu między wątkami, a mutacja zamrożonego obiektu rzucała `InvalidMutabilityException`. Ta jedna reguła czyniła korutyny udręką i była najczęstszym powodem porzucania KMP."
+        },
+        {
+          "type": "rule",
+          "text": "Od Kotlina 1.7.20 nowy model pamięci całkowicie usunął zamrażanie. Stan współdzieli się między wątkami jak na JVM, a korutyny działają tak samo na obu platformach."
+        },
+        {
+          "type": "paragraph",
+          "text": "Praktyczny wniosek: porady sprzed 2022 roku o `freeze()`, `AtomicReference` i `@ThreadLocal` są nieaktualne. Jeśli znajdziesz je w tutorialu, sprawdź datę."
+        },
+        {
+          "type": "subheading",
+          "text": "Co widzi Swift"
+        },
+        {
+          "type": "paragraph",
+          "text": "Framework dla iOS powstaje przez Objective-C, a ta warstwa interopu jest stratna. Wiedza o tym, co ginie, oszczędza przykrej niespodzianki przy integracji."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Kotlin",
+            "W Swifcie"
+          ],
+          "rows": [
+            [
+              "suspend fun",
+              "funkcja z completion handlerem"
+            ],
+            [
+              "Flow",
+              "brak odpowiednika — wymaga wrappera"
+            ],
+            [
+              "sealed interface",
+              "protokół; switch wymaga gałęzi default"
+            ],
+            [
+              "Domyślne wartości argumentów",
+              "niewidoczne — każdy parametr wymagany"
+            ],
+            [
+              "Long / Int",
+              "opakowania KotlinLong / KotlinInt w generykach"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Narzędzia takie jak SKIE czy KMP-NativeCoroutines generują na tym idiomatyczny Swift — natywne enumy z wyczerpującym dopasowaniem, `AsyncSequence` zamiast `Flow`. Warto po nie sięgnąć, zanim zacznie się pisać wrappery ręcznie."
+        },
+        {
+          "type": "rule",
+          "text": "Trzymaj wąskie API eksportowane do iOS. Każdy publiczny typ trafia do nagłówka Objective-C, powiększając framework i czas kompilacji; fasada utrzymuje małą powierzchnię i czysty interop."
+        },
+        {
+          "type": "subheading",
+          "text": "Czego KMP nie rozwiązuje"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Zachowanie platform nadal się różni.** Uprawnienia, praca w tle i cykle życia nie ujednolicają się przez współdzielenie kodu.",
+            "**Współdzielony błąd trafia dwa razy.** Ta sama usterka dociera teraz do obu aplikacji naraz, co podnosi wartość testów, a nie obniża.",
+            "**Rosną czasy budowania.** Każdy target kompiluje się osobno; Kotlin/Native jest tym wolnym.",
+            "**Zawęża się wybór bibliotek.** Zależność tylko na JVM nie wejdzie do commonMain, a to ograniczenie kształtuje architekturę."
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Jak jest ułożony ten projekt"
+        },
+        {
+          "type": "code",
+          "code": "commonMain/   core/mvi, domain, data, presentation, di  — ~95% kodu\nandroidMain/  SharedPreferences, Locale, WindowInsetsController\niosMain/      NSUserDefaults, NSLocale, punkt wejścia",
+          "caption": "Poza commonMain leży tylko kod naprawdę platformowy"
+        },
+        {
+          "type": "paragraph",
+          "text": "Wszystko platformowe jest tu małe i schowane za portem. Efekt: `./gradlew :shared:iosSimulatorArm64Test` uruchamia dokładnie te same testy co androidowe — logika jest weryfikowana dwa razy, choć napisana raz."
+        },
+        {
+          "type": "exercise",
+          "number": 15,
+          "text": "Uruchom ./gradlew :shared:iosSimulatorArm64Test i porównaj liczbę testów z przebiegiem androidowym. Część wspólna to miara tego, co faktycznie jest współdzielone."
+        },
+        {
+          "type": "exercise",
+          "number": 16,
+          "text": "Wypisz wszystko, co leży w androidMain i iosMain tego projektu. Każdy plik odpowiada na pytanie: czego naprawdę nie da się współdzielić?"
+        }
+      ]
+    },
+    {
+      "id": "platform-code",
+      "title": "11. Kod platformowy: port czy expect/actual?",
+      "summary": "Dwa sposoby na abstrakcję nad platformą i jak wybrać właściwy",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Prędzej czy później wspólny kod potrzebuje czegoś, co daje tylko platforma: preferencji, języka, uchwytu okna. Kotlin Multiplatform ma na to **dwa** mechanizmy, a o pomyłkę łatwo, bo oba się kompilują."
+        },
+        {
+          "type": "rule",
+          "text": "Pytanie nie brzmi „jak wywołać kod platformowy”, tylko „czy jest tu cokolwiek, co warto podmieniać”."
+        },
+        {
+          "type": "subheading",
+          "text": "Mechanizm 1: expect/actual"
+        },
+        {
+          "type": "paragraph",
+          "text": "`expect` deklaruje kontrakt w `commonMain`, a każdy target dostarcza `actual`. Kompilator je łączy, a brakujący `actual` to błąd kompilacji."
+        },
+        {
+          "type": "code",
+          "code": "// commonMain\n@Composable\nexpect fun SystemBarsAppearance(isDarkTheme: Boolean)\n\n// androidMain\n@Composable\nactual fun SystemBarsAppearance(isDarkTheme: Boolean) {\n    val controller = (LocalView.current.context as? Activity)?.window?.insetsController\n    // … ustaw odcień ikon\n}\n\n// iosMain — styl paska statusu należy do hostującego UIViewController\n@Composable\nactual fun SystemBarsAppearance(isDarkTheme: Boolean) = Unit",
+          "caption": "SystemBars.kt w tym projekcie"
+        },
+        {
+          "type": "subheading",
+          "text": "Mechanizm 2: port plus DI"
+        },
+        {
+          "type": "paragraph",
+          "text": "Zwykły interfejs w `commonMain`, implementowany per platforma i wstrzykiwany. Żadnej cechy języka — po prostu Dependency Inversion zastosowane na granicy platformy."
+        },
+        {
+          "type": "code",
+          "code": "// commonMain — port\ninterface KeyValueStore {\n    suspend fun getString(key: String): String?\n    suspend fun putString(key: String, value: String)\n}\n\n// androidMain\nclass AndroidKeyValueStore(context: Context) : KeyValueStore { /* SharedPreferences */ }\n\n// iosMain\nclass NsUserDefaultsKeyValueStore : KeyValueStore { /* NSUserDefaults */ }\n\n// commonTest — powód, dla którego ten wzorzec istnieje\nclass InMemoryKeyValueStore : KeyValueStore { /* mapa */ }",
+          "caption": "KeyValueStore w tym projekcie"
+        },
+        {
+          "type": "subheading",
+          "text": "Różnica, która naprawdę ma znaczenie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "",
+            "expect/actual",
+            "Port + DI"
+          ],
+          "rows": [
+            [
+              "Rozwiązywane",
+              "w czasie kompilacji",
+              "w czasie działania"
+            ],
+            [
+              "Da się zafejkować w testach",
+              "nie",
+              "tak"
+            ],
+            [
+              "Widoczne w sygnaturze",
+              "nie — to funkcja globalna",
+              "tak — parametr konstruktora"
+            ],
+            [
+              "Implementacji na target",
+              "dokładnie jedna",
+              "dowolnie wiele"
+            ],
+            [
+              "Koszt",
+              "brak",
+              "interfejs plus konfiguracja DI"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Rozstrzygający jest drugi wiersz. `actual` **nie da się podmienić**: na target przypada dokładnie jeden, wybrany przez kompilator. Każdy test dotykający tej ścieżki wciąga prawdziwą implementację platformową — a na JVM nie ma okna Androida, więc test wymaga emulatora albo w ogóle nie działa."
+        },
+        {
+          "type": "subheading",
+          "text": "Dlaczego ten projekt używa obu"
+        },
+        {
+          "type": "paragraph",
+          "text": "`KeyValueStore` i `LanguageProvider` są portami, bo ich zachowanie warto podmieniać. `ThemePreferencesTest` działa w całości na JVM, w milisekundach:"
+        },
+        {
+          "type": "code",
+          "code": "@Test\nfun `a stored theme is read back`() = runTest {\n    val preferences = KeyValueThemePreferences(InMemoryKeyValueStore())\n\n    preferences.setThemeMode(ThemeMode.Dark)\n\n    assertEquals(ThemeMode.Dark, preferences.getThemeMode())\n}"
+        },
+        {
+          "type": "paragraph",
+          "text": "`SystemBarsAppearance` jest `expect/actual`, bo nie ma tu czego podmieniać. Nie ma rozgałęzień, wartości zwracanej ani logiki — przekazuje platformie jeden boolean. Fake asertowałby, że wywołanie nastąpiło, czyli testowałby mocka, a nie aplikację."
+        },
+        {
+          "type": "subheading",
+          "text": "Reguła decyzyjna"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Trzyma **stan** albo podejmuje **decyzję**? Port.",
+            "Czy test chciałby to **kontrolować** (zwrócić wartość, zasymulować błąd)? Port.",
+            "To **jednokierunkowy efekt uboczny** bez logiki — wibracja, flaga okna, otwarcie URL-a? `expect/actual` jest w porządku.",
+            "Wątpliwość? Wybierz port. Kosztem jest interfejs; kosztem złego wyboru jest nietestowalna ścieżka kodu."
+          ]
+        },
+        {
+          "type": "rule",
+          "text": "`expect/actual` to narzędzie do łatania dziur w API platformy, nie do budowania struktury aplikacji. Struktura bierze się z interfejsów."
+        },
+        {
+          "type": "subheading",
+          "text": "Pułapka: expect/actual dla rzeczy z logiką"
+        },
+        {
+          "type": "code",
+          "code": "// KUSZĄCE — i nietestowalne\nexpect fun currentTimeMillis(): Long\n\nfun isTokenExpired(expiry: Long) = currentTimeMillis() > expiry\n// Jak przetestować wygaśnięcie bez czekania, aż minie prawdziwy czas?\n\n// LEPIEJ\nfun interface Clock { fun now(): Long }\n\nclass TokenValidator(private val clock: Clock) {\n    fun isExpired(expiry: Long) = clock.now() > expiry\n}"
+        },
+        {
+          "type": "paragraph",
+          "text": "To samo dotyczy generatorów liczb losowych, fabryk identyfikatorów i wszystkiego, co czyta stan sieci. Każda z tych rzeczy wygląda na „szczegół platformowy”, a każda jest decyzją, którą test musi kontrolować."
+        },
+        {
+          "type": "subheading",
+          "text": "Rozwiązanie pośrednie, warte znajomości"
+        },
+        {
+          "type": "paragraph",
+          "text": "Zależność platformowa nie musi być rozwiązana przez DI **ani** przez kompilator — może być zwykłym parametrem. Ten projekt przekazuje moduł platformowy do punktu wejścia:"
+        },
+        {
+          "type": "code",
+          "code": "@Composable\nfun App(platformModule: Module = previewPlatformModule()) {\n    KoinApplication(application = { modules(appModules(platformModule)) }) { AppContent() }\n}\n\n// androidApp\nApp(platformModule = module {\n    single<KeyValueStore> { AndroidKeyValueStore(applicationContext) }\n})",
+          "caption": "App.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Zależność zostaje widoczna w sygnaturze, `Context` nie przecieka do wspólnego kodu, a podglądy dostają domyślną implementację w pamięci bez żadnej magii."
+        },
+        {
+          "type": "exercise",
+          "number": 13,
+          "text": "Znajdź w projekcie SystemBars.kt i jego dwie implementacje actual. Zastanów się, co test tej funkcji mógłby w ogóle sprawdzić — odpowiedź tłumaczy, dlaczego to nie jest port."
+        },
+        {
+          "type": "exercise",
+          "number": 14,
+          "text": "Dodaj port zwracający informację, czy urządzenie jest online, wraz z fake'iem do testów. Potem spróbuj tego samego przez expect/actual i porównaj testowalność."
+        }
+      ]
+    },
+    {
+      "id": "testing",
+      "title": "12. Testowanie w tym projekcie",
+      "summary": "Reducer bez korutyn, ViewModel na czasie wirtualnym",
+      "blocks": [
+        {
+          "type": "subheading",
+          "text": "Reducer – testy bez UI, korutyn i mocków"
+        },
+        {
+          "type": "code",
+          "code": "@Test\nfun `FavoriteSaveFailed cofa optymistyczny update`() {\n    val optimistic = reduce(UsersState(users = listOf(anna)),\n        UsersIntent.Ui.FavoriteToggled(\"u-1\"))\n    val saving = reduce(optimistic,\n        UsersIntent.Internal.FavoriteSaveStarted(\"u-1\"))\n\n    val rolledBack = reduce(saving,\n        UsersIntent.Internal.FavoriteSaveFailed(\"u-1\", \"brak sieci\"))\n\n    assertFalse(rolledBack.users.first().isFavorite)\n}",
+          "caption": "UsersReducerTest.kt"
+        },
+        {
+          "type": "subheading",
+          "text": "ViewModel – czas wirtualny"
+        },
+        {
+          "type": "paragraph",
+          "text": "Debounce 350 ms i opóźnienie sieci 700 ms nie spowalniają testów: **advanceTimeBy** i **advanceUntilIdle** przesuwają zegar natychmiast."
+        },
+        {
+          "type": "code",
+          "code": "vm.dispatch(UsersIntent.Ui.QueryChanged(\"A\"));   advanceTimeBy(100)\nvm.dispatch(UsersIntent.Ui.QueryChanged(\"An\"));  advanceTimeBy(100)\nvm.dispatch(UsersIntent.Ui.QueryChanged(\"Ann\")); advanceUntilIdle()\n\nassertEquals(listOf(\"Ann\"), repository.loadedQueries)  // jedno zapytanie"
+        },
+        {
+          "type": "rule",
+          "text": "Pułapka z tego projektu: efekty zbieraj na UnconfinedTestDispatcher. Na StandardTestDispatcher moment odbioru zależy od kolejności zadań i test bywa niedeterministyczny."
+        },
+        {
+          "type": "code",
+          "code": "./gradlew :shared:testAndroidHostTest      # Android (JVM)\n./gradlew :shared:iosSimulatorArm64Test    # iOS\n./gradlew :androidApp:assembleDebug        # aplikacja",
+          "caption": "Komendy"
+        }
+      ]
+    },
+    {
+      "id": "testing-kinds",
+      "title": "13. Rodzaje testów w projekcie mobilnym",
+      "summary": "Unit, smoke, golden, Espresso/Compose UI, XCTest i XCUITest",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Testy różnią się **kosztem** i **zasięgiem**. Piramida testów mówi: im wyżej, tym wolniej, drożej i mniej stabilnie — więc tym mniej takich testów."
+        },
+        {
+          "type": "code",
+          "code": "       ╱╲          UI / E2E     — kilkanaście, minuty\n      ╱  ╲                        Espresso, Compose UI, XCUITest\n     ╱────╲       Golden        — dziesiątki, sekundy\n    ╱      ╲                      Paparazzi, Roborazzi, snapshot\n   ╱────────╲     Integracyjne  — setki, sekundy\n  ╱          ╲                    ViewModel + fake repo\n ╱────────────╲   Jednostkowe   — tysiące, milisekundy\n╱______________╲                  reducer, use case",
+          "caption": "Piramida testów"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Rodzaj",
+            "Co sprawdza",
+            "Gdzie działa",
+            "Czas"
+          ],
+          "rows": [
+            [
+              "Unit",
+              "Czysta logika",
+              "JVM / native",
+              "ms"
+            ],
+            [
+              "Integracyjny",
+              "ViewModel + zależności",
+              "JVM",
+              "ms"
+            ],
+            [
+              "Smoke",
+              "Czy najważniejsze ścieżki żyją",
+              "JVM lub urządzenie",
+              "s"
+            ],
+            [
+              "Golden",
+              "Czy UI wygląda tak samo",
+              "JVM (render)",
+              "s"
+            ],
+            [
+              "UI / E2E",
+              "Cała aplikacja jak u użytkownika",
+              "Emulator / symulator",
+              "min"
+            ]
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "1. Testy jednostkowe — fundament"
+        },
+        {
+          "type": "paragraph",
+          "text": "W MVI reducer jest czystą funkcją, więc test nie potrzebuje korutyn, UI ani mocków. Takich testów pisz najwięcej."
+        },
+        {
+          "type": "code",
+          "code": "@Test\nfun `LoadFailed ustawia blad i konczy ladowanie`() {\n    val result = UsersReducer.reduce(\n        UsersState(isLoading = true),\n        UsersIntent.Internal.LoadFailed(\"HTTP 503\"),\n    )\n\n    assertEquals(\"HTTP 503\", result.error)\n    assertFalse(result.isLoading)\n}",
+          "caption": "UsersReducerTest.kt (jest w projekcie)"
+        },
+        {
+          "type": "subheading",
+          "text": "2. Testy integracyjne — ViewModel z zależnościami"
+        },
+        {
+          "type": "paragraph",
+          "text": "Sprawdzają współpracę: debounce, anulowanie, retry, rollback. Czas jest wirtualny, więc opóźnienie 700 ms nie kosztuje 700 ms."
+        },
+        {
+          "type": "code",
+          "code": "@Test\nfun `szybkie pisanie wywoluje tylko jedno zapytanie dzieki debounce`() =\n    runTest(dispatcher) {\n        vm.dispatch(UsersIntent.Ui.QueryChanged(\"A\"));   advanceTimeBy(100)\n        vm.dispatch(UsersIntent.Ui.QueryChanged(\"An\"));  advanceTimeBy(100)\n        vm.dispatch(UsersIntent.Ui.QueryChanged(\"Ann\")); advanceUntilIdle()\n\n        assertEquals(listOf(\"Ann\"), repository.loadedQueries)\n    }",
+          "caption": "UsersViewModelTest.kt (jest w projekcie)"
+        },
+        {
+          "type": "subheading",
+          "text": "3. Smoke testy — czy aplikacja w ogóle żyje"
+        },
+        {
+          "type": "paragraph",
+          "text": "Wąski zestaw testów odpalany po każdym buildzie: czy da się złożyć graf DI, czy ekran startowy się renderuje, czy główna ścieżka przechodzi. Ma odpowiadać na pytanie „czy warto uruchamiać resztę testów”."
+        },
+        {
+          "type": "code",
+          "code": "@Test\nfun `graf zaleznosci mozna rozwiazac`() {\n    val koin = koinApplication { modules(dataModule, domainModule) }.koin\n\n    koin.get<UserRepository>()\n    koin.get<SearchUsersUseCase>()\n\n    stopKoin()\n}",
+          "caption": "Smoke DI — KoinModulesTest.kt (jest w projekcie)"
+        },
+        {
+          "type": "rule",
+          "text": "Smoke test to nie rodzaj technologii, tylko **rola** testu: szybko wykryć, że build jest fundamentalnie zepsuty."
+        },
+        {
+          "type": "subheading",
+          "text": "4. Testy golden (screenshot / snapshot)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Renderują komponent do bitmapy i porównują z zatwierdzonym wzorcem („golden file”). Wychwytują regresje wizualne, których nie złapie żadna asercja na tekście: zły padding, obcięty tekst, zły kolor w dark mode."
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "**Paparazzi** (Cash App) – render na JVM, bez emulatora, bardzo szybki.",
+            "**Roborazzi** – oparty o Robolectric, działa z Compose.",
+            "**Compose Preview Screenshot Testing** – oficjalne narzędzie AGP.",
+            "**iOS: swift-snapshot-testing** (Point-Free) – odpowiednik dla SwiftUI/UIKit."
+          ]
+        },
+        {
+          "type": "code",
+          "code": "class UsersScreenGoldenTest {\n    @get:Rule val paparazzi = Paparazzi(deviceConfig = PIXEL_5)\n\n    @Test\n    fun stan_bledu() {\n        paparazzi.snapshot {\n            MaterialTheme {\n                UsersContent(\n                    state = UsersState(error = \"HTTP 503\"),\n                    onIntent = {},\n                )\n            }\n        }\n    }\n}",
+          "caption": "Szkic testu golden (Paparazzi)"
+        },
+        {
+          "type": "rule",
+          "text": "Golden testy najlepiej działają z MVI: podajesz gotowy `State` i renderujesz. Nie musisz klikać przez pół aplikacji, żeby dojść do stanu błędu."
+        },
+        {
+          "type": "paragraph",
+          "text": "Uwaga praktyczna: golden files zatwierdzaj świadomie. Bezmyślne „update all snapshots” zamienia je w test, który zawsze przechodzi."
+        },
+        {
+          "type": "subheading",
+          "text": "5. Testy UI na Androidzie — Espresso i Compose"
+        },
+        {
+          "type": "paragraph",
+          "text": "**Espresso** to klasyka dla widoków XML. Dla Compose używa się `ComposeTestRule` — API jest inne, ale rola ta sama: klikamy i asertujemy na prawdziwym drzewie UI."
+        },
+        {
+          "type": "code",
+          "code": "@RunWith(AndroidJUnit4::class)\nclass UsersEspressoTest {\n    @get:Rule val rule = ActivityScenarioRule(MainActivity::class.java)\n\n    @Test fun wyszukiwanie_filtruje_liste() {\n        onView(withId(R.id.searchField)).perform(typeText(\"Anna\"))\n        onView(withText(\"Anna Kowalska\")).check(matches(isDisplayed()))\n    }\n}",
+          "caption": "Espresso (widoki XML)"
+        },
+        {
+          "type": "code",
+          "code": "class UsersScreenTest {\n    @get:Rule val compose = createComposeRule()\n\n    @Test fun blad_pokazuje_przycisk_ponow() {\n        compose.setContent {\n            MaterialTheme { UsersScreen(viewModel = fakeViewModel, onOpenDetails = {}) }\n        }\n\n        compose.onNodeWithText(\"Spróbuj ponownie\").assertIsDisplayed()\n        compose.onNodeWithText(\"Spróbuj ponownie\").performClick()\n    }\n}",
+          "caption": "Compose UI test (odpowiednik dla tego projektu)"
+        },
+        {
+          "type": "paragraph",
+          "text": "Projekt jest gotowy na testy instrumentalne: `shared/build.gradle.kts` konfiguruje `withDeviceTestBuilder` z `AndroidJUnitRunner`. Kod testów trafia do source setu `androidDeviceTest`."
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Do stabilności używaj `testTag(\"users_list\")` zamiast szukania po tekście — tekst zmienia się przy tłumaczeniach.",
+            "Compose ma automatyczną synchronizację (idling); przy ręcznych timerach użyj `mainClock.advanceTimeBy(...)`.",
+            "Testy UI odpalaj na CI wybiórczo — są najwolniejsze i najbardziej kruche."
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "6. Testy na iOS — XCTest i XCUITest"
+        },
+        {
+          "type": "paragraph",
+          "text": "**XCTest** to testy jednostkowe kodu Swift. **XCUITest** to testy UI sterujące aplikacją z zewnątrz — odpowiednik Espresso."
+        },
+        {
+          "type": "code",
+          "code": "final class UsersUITests: XCTestCase {\n    func testWyszukiwanieFiltrujeListe() {\n        let app = XCUIApplication()\n        app.launch()\n\n        app.textFields.firstMatch.tap()\n        app.textFields.firstMatch.typeText(\"Anna\")\n\n        XCTAssertTrue(app.staticTexts[\"Anna Kowalska\"].waitForExistence(timeout: 5))\n    }\n}",
+          "caption": "XCUITest — iosApp/iosAppUITests"
+        },
+        {
+          "type": "paragraph",
+          "text": "Logikę współdzieloną (reducer, use case) testujemy **raz**, w Kotlinie: `./gradlew :shared:iosSimulatorArm64Test` uruchamia te same testy na symulatorze iOS. W Xcode zostają wtedy tylko testy warstwy Swift i UI."
+        },
+        {
+          "type": "rule",
+          "text": "W KMP nie duplikuj testów logiki w Swifcie. Testuj wspólny kod raz, a w Xcode sprawdzaj to, co faktycznie jest specyficzne dla iOS."
+        },
+        {
+          "type": "subheading",
+          "text": "Co uruchamiać i kiedy"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Moment",
+            "Co uruchamiasz"
+          ],
+          "rows": [
+            [
+              "Podczas pisania kodu",
+              "Testy jednostkowe reducera"
+            ],
+            [
+              "Przed commitem",
+              "Unit + integracyjne + smoke"
+            ],
+            [
+              "Na pull requeście",
+              "Powyższe + golden"
+            ],
+            [
+              "Nocny build / przed release",
+              "Wszystko, łącznie z UI/E2E"
+            ]
+          ]
+        },
+        {
+          "type": "code",
+          "code": "./gradlew :shared:testAndroidHostTest      # unit + integracyjne + smoke (JVM)\n./gradlew :shared:iosSimulatorArm64Test    # te same testy na iOS\n./gradlew :androidApp:assembleDebug        # build aplikacji\n./gradlew connectedAndroidTest             # testy instrumentalne (wymaga emulatora)\n# iOS UI: Xcode → Product → Test (⌘U)",
+          "caption": "Komendy w tym projekcie"
+        },
+        {
+          "type": "exercise",
+          "number": 6,
+          "text": "Napisz test Compose UI sprawdzający, że po włączeniu „Symuluj błąd sieci” i odświeżeniu pojawia się przycisk „Spróbuj ponownie”."
+        },
+        {
+          "type": "exercise",
+          "number": 7,
+          "text": "Dodaj `testTag` do listy użytkowników i panelu osi czasu, żeby przyszłe testy UI nie musiały polegać na tekstach."
+        }
+      ]
+    },
+    {
+      "id": "cheat-sheet",
+      "title": "14. Ściąga",
+      "summary": "Zasady, których warto pilnować na review",
+      "blocks": [
+        {
+          "type": "subheading",
+          "text": "MVI"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Reducer jest czysty: bez I/O, bez czasu, bez losowości.",
+            "Reducer wie CO się stało, ViewModel wie CO ZROBIĆ dalej.",
+            "Nawigacja i komunikaty to efekty, nie stan.",
+            "Wynik I/O wraca jako Intent.Internal – nigdy `_state.value = ...`.",
+            "Stan pochodny liczony w State, nie w Compose.",
+            "CancellationException przepuszczaj dalej – to nie błąd domenowy."
+          ]
+        },
+        {
+          "type": "subheading",
+          "text": "Clean Architecture"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Zależności wskazują do wewnątrz: presentation → domain ← data.",
+            "Interfejs repozytorium w domain, implementacja w data.",
+            "Reguła biznesowa należy do use case'a, nie do ViewModelu.",
+            "Model domenowy to czysty Kotlin – bez adnotacji frameworków.",
+            "Graf DI testuj tak samo jak resztę kodu."
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Kolejny krok: dodaj paginację (Ui.LoadMoreRequested + Internal.PageLoaded) tak, żeby trwające ładowanie strony nie kolidowało z odświeżeniem listy."
+        }
+      ]
+    }
+  ],
+  "version": 2
+}

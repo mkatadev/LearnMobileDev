@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Motyw okna aktywności.
+
+      Kluczowy jest `windowBackground`: to on jest widoczny między pokazaniem okna
+      a pierwszą klatką narysowaną przez Compose. Domyślny Theme.Material.Light
+      dawał biały błysk u osób korzystających z ciemnego motywu.
+
+      Kolor marki sprawia, że ten moment wygląda jak przedłużenie splash screena.
+    -->
+    <style name="Theme.LearnMobileDev" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brand</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>

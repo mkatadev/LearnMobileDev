@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Kolor marki — ten sam co tło ikony launchera i plansza startowa w Compose. -->
+    <color name="brand">#2E5AAC</color>
+</resources>

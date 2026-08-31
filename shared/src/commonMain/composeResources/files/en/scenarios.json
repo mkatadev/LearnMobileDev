@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "lost-update",
+      "title": "Lost update (var++)",
+      "description": "{workers} coroutines increment a shared field: read → yield() → write.",
+      "expectation": "We expect {workers}, but we will see fewer.",
+      "explanation": "There is a suspension point between the read and the write. Other coroutines get to read the same value, so their writes overwrite one another. Note: this happens even on a SINGLE thread — concurrency is not the same thing as parallelism.",
+      "demonstratesBug": true
+    },
+    {
+      "id": "mutex",
+      "title": "Fix: Mutex",
+      "description": "The same code, but the critical section is wrapped in `mutex.withLock { }`.",
+      "expectation": "Exactly {workers} — every increment is indivisible.",
+      "explanation": "The Mutex from kotlinx.coroutines suspends the coroutine instead of blocking the thread. That makes it cheap and safe, unlike `synchronized`, which would block the thread along with the whole dispatcher.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "stateflow-value",
+      "title": "StateFlow: .value = instead of update {}",
+      "description": "{workers} coroutines run `flow.value = flow.value + 1` with a yield() in between.",
+      "expectation": "We expect {workers}, but we will see fewer.",
+      "explanation": "`.value = x` is a plain write, not an atomic operation. The read-modify-write pattern on a StateFlow is exactly as race-prone as it is on an ordinary field.",
+      "demonstratesBug": true
+    },
+    {
+      "id": "stateflow-update",
+      "title": "Fix: StateFlow.update {}",
+      "description": "The same code expressed as `flow.update { it + 1 }`.",
+      "expectation": "Exactly {workers} — update runs a compare-and-set loop.",
+      "explanation": "`update {}` retries the lambda until the value is written without a collision. That is why the lambda must be pure and cheap: it may run several times.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "mvi-loop",
+      "title": "The MVI loop serializes intents",
+      "description": "{workers} coroutines call dispatch() at once; a single consumer reduces them.",
+      "expectation": "Exactly {workers} — no intent is lost.",
+      "explanation": "This is how MviStore works in this project: dispatch only puts an intent on a channel, and one loop consumes it. Reduction never runs concurrently, so the reducer needs no locks at all.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "collect-latest",
+      "title": "collectLatest cancels stale requests",
+      "description": "Five requests fired in quick succession; each one “takes” 50 ms.",
+      "expectation": "Only request number 5 will complete.",
+      "explanation": "This is the mechanism that stops a search field from having fresh results overwritten by stale ones. In this project UsersViewModel relies on it.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "channel-vs-sharedflow",
+      "title": "Channel vs SharedFlow for effects",
+      "description": "An event emitted BEFORE any collector had a chance to subscribe.",
+      "expectation": "Channel delivers the event, MutableSharedFlow drops it.",
+      "explanation": "That is why one-off effects (snackbars, navigation) live in a channel rather than a SharedFlow without replay. Otherwise an error message vanishes exactly when the screen happens to be recreating.",
+      "demonstratesBug": false
+    }
+  ]
+}

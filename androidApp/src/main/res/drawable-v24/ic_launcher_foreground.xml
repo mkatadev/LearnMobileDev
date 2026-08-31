@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Warstwa pierwszoplanowa: sylwetka telefonu ze wznoszącą się strzałką.
+  Znaczenie: "mobile" (telefon) + "nauka / postęp" (strzałka w górę).
+
+  Cała grafika mieści się w bezpiecznym obszarze adaptive icon (środkowe 66 z 108 dp),
+  poza którym system może ją przyciąć przy maskach okrągłych i animacji parallax.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Korpus telefonu (proporcje zbliżone do 9:19) -->
+    <path
+        android:pathData="M44,24h20a7,7 0 0 1 7,7v46a7,7 0 0 1 -7,7h-20a7,7 0 0 1 -7,-7v-46a7,7 0 0 1 7,-7z"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- Ekran -->
+    <path
+        android:pathData="M42,32h24v44h-24z"
+        android:fillColor="#FF2E5AAC" />
+
+    <!-- Wskaźnik nawigacji -->
+    <path
+        android:pathData="M48,79h12a1.25,1.25 0 0 1 0,2.5h-12a1.25,1.25 0 0 1 0,-2.5z"
+        android:fillColor="#FF2E5AAC" />
+
+    <!-- Zygzak "w górę" -->
+    <path
+        android:pathData="M45,63L50,55L55,60L60,51"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+
+    <!-- Grot strzałki jako wypełniony trójkąt: przy 48 dp czyta się lepiej niż cienki nawias -->
+    <path
+        android:pathData="M63.4,46.1L53.9,49.4L60.6,55.6z"
+        android:fillColor="#FFFFFFFF" />
+</vector>

@@ -1,0 +1,2280 @@
+{
+  "version": 2,
+  "questions": [
+    {
+      "id": "mvi-1",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Reducer w MVI otrzymuje intencję wymagającą pobrania danych z sieci. Co powinien zrobić?",
+      "options": [
+        "Wywołać repozytorium i zwrócić stan z wynikiem",
+        "Zwrócić stan bez zmian lub z flagą ładowania — I/O uruchamia warstwa store/ViewModel",
+        "Uruchomić korutynę i zaktualizować stan w callbacku",
+        "Rzucić wyjątek, bo reducer nie obsługuje takich intencji"
+      ],
+      "correctIndex": 1,
+      "explanation": "Reducer musi pozostać czystą funkcją (State, Intent) -> State. I/O w reducerze niszczy determinizm, uniemożliwia testy bez mocków i psuje time travel — odtworzenie stanu wywołałoby ponownie zapytanie sieciowe. Efekty uboczne uruchamia store po redukcji, a ich wynik wraca jako osobna intencja Internal."
+    },
+    {
+      "id": "mvi-2",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Dlaczego zdarzenia jednorazowe (snackbar, nawigacja) nie powinny być polem w State?",
+      "options": [
+        "Bo zwiększają rozmiar obiektu stanu",
+        "Bo State jest odtwarzalny — po rekompozycji/obrocie zdarzenie wykonałoby się ponownie",
+        "Bo Compose nie potrafi renderować zdarzeń",
+        "Bo StateFlow nie obsługuje typów nullable"
+      ],
+      "correctIndex": 1,
+      "explanation": "State opisuje to, co jest PRAWDĄ w danej chwili, i jest odtwarzany przy każdej rekompozycji oraz po zmianie konfiguracji. Zdarzenie w stanie zostałoby skonsumowane wielokrotnie. Rozwiązania: Channel z receiveAsFlow (dokładnie jeden odbiorca, nic nie ginie) albo SharedFlow z ręcznym potwierdzaniem."
+    },
+    {
+      "id": "mvi-3",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Do przechowywania efektów jednorazowych wybrano MutableSharedFlow bez replay. Jaki błąd się pojawi?",
+      "options": [
+        "Efekty będą dublowane po obrocie ekranu",
+        "Efekt wysłany zanim kolektor się podłączy zostanie bezpowrotnie utracony",
+        "Efekty będą dostarczane w losowej kolejności",
+        "Nie pojawi się żaden błąd — to rozwiązanie równoważne z Channel"
+      ],
+      "correctIndex": 1,
+      "explanation": "SharedFlow bez replay jest gorący i nie buforuje dla nieobecnych subskrybentów. Jeśli błąd sieci wystąpi w momencie, gdy ekran jest odtwarzany, snackbar nigdy się nie pokaże. Channel buforuje zdarzenie do czasu odbioru, dlatego jest właściwym wyborem dla efektów kierowanych do jednego odbiorcy.",
+      "code": "private val _effects = MutableSharedFlow<Effect>()   // gubi zdarzenia\nprivate val _effects = Channel<Effect>(Channel.BUFFERED)  // nie gubi"
+    },
+    {
+      "id": "mvi-4",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Optymistyczna aktualizacja: użytkownik klika gwiazdkę, zapis trwa, klika ponownie. Gdzie najlepiej zabezpieczyć się przed dwuklikiem?",
+      "options": [
+        "enabled = false na przycisku w Compose",
+        "Debounce na kliknięciach w ViewModelu",
+        "W reducerze — jeśli id jest w zbiorze savingFavorites, zwróć stan bez zmian",
+        "Flagą isLoading w ViewModelu poza stanem"
+      ],
+      "correctIndex": 2,
+      "explanation": "Zabezpieczenie w reducerze jest testowalne bez UI i działa niezależnie od tego, ile widoków wysyła intencje. enabled=false to tylko warstwa prezentacji — nie chroni przed programowym dispatchem ani przed wyścigiem. Dodatkowo store może wykryć brak zmiany stanu (before == after) i pominąć I/O."
+    },
+    {
+      "id": "mvi-5",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Czym różni się Intent.Ui od Intent.Internal i po co ten podział?",
+      "options": [
+        "Ui są synchroniczne, Internal asynchroniczne",
+        "Ui wyrażają zamiar użytkownika, Internal opisują fakt, który już zaszedł (wynik I/O)",
+        "Internal są prywatne i nie przechodzą przez reducer",
+        "To wyłącznie konwencja nazewnicza bez znaczenia technicznego"
+      ],
+      "correctIndex": 1,
+      "explanation": "Ui to życzenia (QueryChanged), Internal to fakty w czasie przeszłym (LoadSucceeded). Oba przechodzą przez ten sam reducer, dzięki czemu KAŻDA zmiana stanu ma nazwę i trafia na oś czasu. Bez tego podziału wyniki I/O ustawiałyby stan bezpośrednio i powstałoby drugie, ukryte miejsce mutacji."
+    },
+    {
+      "id": "mvi-6",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "W MviStore intencje trafiają do Channela konsumowanego przez jedną pętlę. Co to gwarantuje?",
+      "options": [
+        "Że intencje nie zginą przy przeciążeniu",
+        "Serializację redukcji — dwa równoległe dispatch nie mogą przepleść odczytu i zapisu stanu",
+        "Że redukcja wykona się na Dispatchers.Main",
+        "Automatyczne odrzucanie duplikatów intencji"
+      ],
+      "correctIndex": 1,
+      "explanation": "Pojedynczy konsument sprawia, że reduce() nigdy nie wykonuje się współbieżnie. Dlatego reducer nie potrzebuje żadnych blokad, a middleware widzi spójne pary before/after. Zobacz scenariusz 'Pętla MVI' w zakładce Sync — 100 równoległych dispatch i zero utraconych intencji."
+    },
+    {
+      "id": "mvi-7",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Ekran ma pola isLoading, error i users. Gdzie umieścić warunek showEmptyState?",
+      "options": [
+        "Jako osobne pole Boolean w State, ustawiane w reducerze",
+        "Jako właściwość obliczana (get()) w klasie State",
+        "W funkcji Composable, tuż przed renderowaniem listy",
+        "W ViewModelu jako osobny StateFlow"
+      ],
+      "correctIndex": 1,
+      "explanation": "Stan pochodny liczony w State jest jednym źródłem prawdy, testowalnym bez UI i niemożliwym do zapomnienia w jednym z kilku miejsc renderujących. Osobne pole Boolean wymagałoby aktualizacji w każdej gałęzi reducera i prędzej czy później rozjechałoby się z resztą stanu."
+    },
+    {
+      "id": "mvi-8",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Time travel debugging jest możliwy w MVI, ale nie w typowym MVVM. Dlaczego?",
+      "options": [
+        "Bo MVI używa niemutowalnych struktur danych",
+        "Bo każda zmiana stanu przechodzi przez jedną nazwaną funkcję, więc historia (intencja, stan) w pełni opisuje sesję",
+        "Bo StateFlow przechowuje historię wartości",
+        "Bo Compose zapisuje snapshoty rekompozycji"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kluczem nie jest niemutowalność sama w sobie, tylko to, że istnieje JEDNO miejsce przejścia stanu. W MVVM stan mutują rozproszone metody, więc nie da się zebrać kompletnej, uporządkowanej listy przejść ani ich odtworzyć."
+    },
+    {
+      "id": "mvi-9",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Formularz ma 30 pól. Tworzysz 30 osobnych intencji FieldXChanged. Co jest problemem?",
+      "options": [
+        "Wydajność — zbyt wiele obiektów intencji",
+        "Nadmiarowy boilerplate; lepszy jest jeden Intent z modelem formularza lub referencją do pola",
+        "Reducer nie obsłuży tylu gałęzi when",
+        "Nie ma problemu — to prawidłowe zastosowanie MVI"
+      ],
+      "correctIndex": 1,
+      "explanation": "MVI nie jest dogmatem. Przy dużych formularzach 30 intencji i 30 gałęzi when to czysty koszt bez zysku. Rozsądniej: FieldChanged(field: FormField, value: String) albo FormUpdated(form: FormModel). Wzorzec ma służyć czytelności, nie odwrotnie."
+    },
+    {
+      "id": "mvi-10",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Store wykonuje I/O w onIntentProcessed. Dlaczego ta metoda NIE powinna być suspend i blokować pętli?",
+      "options": [
+        "Bo suspend nie działa w klasach abstrakcyjnych",
+        "Bo długie zadanie zablokowałoby przetwarzanie kolejnych intencji i zamroziło cały ekran",
+        "Bo naruszałoby to czystość reducera",
+        "Bo Channel nie obsługuje funkcji suspend"
+      ],
+      "correctIndex": 1,
+      "explanation": "Pętla intencji musi pozostać responsywna. Gdyby czekała na zakończenie zapytania sieciowego, użytkownik nie mógłby nawet zwinąć panelu ani wpisać kolejnej litery. Efekty uboczne uruchamiamy w osobnych korutynach, a ich wyniki wracają jako intencje."
+    },
+    {
+      "id": "kmp-1",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Do czego służy mechanizm expect/actual?",
+      "options": [
+        "Do deklarowania zależności opcjonalnych w Gradle",
+        "Do deklaracji API w kodzie wspólnym i dostarczenia implementacji per platforma",
+        "Do oznaczania kodu wymagającego opt-in",
+        "Do generowania nagłówków Objective-C"
+      ],
+      "correctIndex": 1,
+      "explanation": "expect deklaruje kontrakt w commonMain, actual dostarcza implementację w androidMain/iosMain. Uwaga: to nie zawsze najlepsze rozwiązanie — często czystszym podejściem jest zwykły interfejs w commonMain i wstrzyknięcie implementacji przez DI, bo daje się łatwiej testować i podmieniać."
+    },
+    {
+      "id": "kmp-2",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Kotlin/Native od wersji 1.7.20 używa nowego modelu pamięci. Co się zmieniło?",
+      "options": [
+        "Zniknął garbage collector",
+        "Zniknęło zamrażanie obiektów (freeze) i ograniczenie współdzielenia stanu między wątkami",
+        "Obiekty są zawsze kopiowane między wątkami",
+        "Kotlin/Native przeszedł na zliczanie referencji jak Swift"
+      ],
+      "correctIndex": 1,
+      "explanation": "Stary model wymagał freeze() i rzucał InvalidMutabilityException przy próbie mutacji współdzielonego obiektu — to była największa bariera KMP. Nowy model pozwala współdzielić stan między wątkami tak jak na JVM, dzięki czemu korutyny i Flow działają w Kotlin/Native bez obejść."
+    },
+    {
+      "id": "kmp-3",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Jak wyeksponować Flow z kodu wspólnego do Swifta w sposób wygodny dla iOS?",
+      "options": [
+        "Bezpośrednio — Swift natywnie rozumie Flow",
+        "Opakować we własny wrapper z callbackiem/AsyncSequence albo użyć SKIE/KMP-NativeCoroutines",
+        "Zamienić Flow na LiveData",
+        "Eksportować wyłącznie funkcje suspend, Flow się nie da"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin/Native eksportuje funkcje suspend jako funkcje z completion handlerem, ale Flow nie ma bezpośredniego odpowiednika w Swifcie. Rozwiązania: własny wrapper z subskrypcją i zwróceniem uchwytu do anulowania, albo narzędzia takie jak SKIE czy KMP-NativeCoroutines, które generują natywne AsyncSequence."
+    },
+    {
+      "id": "kmp-4",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Które warstwy aplikacji najbardziej opłaca się współdzielić w KMP?",
+      "options": [
+        "Wyłącznie warstwę UI",
+        "Domenę i dane (modele, use case'y, repozytoria), a UI opcjonalnie przez Compose Multiplatform",
+        "Wyłącznie modele danych",
+        "Wszystko albo nic — KMP nie pozwala na częściowe współdzielenie"
+      ],
+      "correctIndex": 1,
+      "explanation": "Największy zysk daje współdzielenie logiki biznesowej i warstwy danych — tam mieszka złożoność i tam błędy najbardziej bolą. UI można współdzielić przez Compose Multiplatform, ale to decyzja niezależna: wiele zespołów świadomie zostawia natywne UI (SwiftUI), dzieląc tylko domenę. KMP pozwala na dowolny stopień współdzielenia."
+    },
+    {
+      "id": "kmp-5",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Czym różni się source set commonMain od androidMain i iosMain?",
+      "options": [
+        "commonMain kompiluje się tylko na Androida",
+        "commonMain zawiera kod dla wszystkich targetów i nie ma dostępu do API platformowych",
+        "androidMain ma pierwszeństwo przed commonMain przy konfliktach nazw",
+        "iosMain jest generowany automatycznie z commonMain"
+      ],
+      "correctIndex": 1,
+      "explanation": "commonMain kompiluje się dla każdego targetu, więc może używać wyłącznie API dostępnego wszędzie (stdlib, kotlinx). Kod platformowy trafia do androidMain/iosMain, które widzą commonMain i mogą dostarczać implementacje actual. Hierarchię można rozbudować o pośrednie source sety, np. nativeMain czy appleMain."
+    },
+    {
+      "id": "kmp-6",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "W commonMain potrzebujesz odczytać plik z zasobów. Jakie podejście jest zgodne z KMP?",
+      "options": [
+        "java.io.File — działa na obu platformach",
+        "Compose Multiplatform Resources (Res.readBytes) albo własny interfejs z implementacjami per platforma",
+        "android.content.Context przekazany do commonMain",
+        "kotlin.io.readLine z przekierowaniem"
+      ],
+      "correctIndex": 1,
+      "explanation": "java.io.File i Context to API JVM/Android — niedostępne w commonMain. Compose Resources daje wspólne Res.readBytes działające na obu platformach. Alternatywa to własny port (fun interface Source) z implementacjami actual, co dodatkowo ułatwia testowanie — dokładnie tak zrobiono w tym projekcie z LessonsSource."
+    },
+    {
+      "id": "co-1",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Poniższy kod uruchomiony przez 100 korutyn na JEDNYM wątku daje wynik mniejszy niż 100. Dlaczego?",
+      "options": [
+        "Bo Dispatchers.Default używa wielu rdzeni",
+        "Bo yield() tworzy punkt zawieszenia między odczytem a zapisem, w który wchodzą inne korutyny",
+        "Bo var nie jest oznaczone jako @Volatile",
+        "Bo async nie gwarantuje wykonania wszystkich zadań"
+      ],
+      "correctIndex": 1,
+      "explanation": "To najważniejsza intuicja przy korutynach: współbieżność to nie równoległość. Wyścig powstaje wszędzie tam, gdzie między odczytem a zapisem jest punkt zawieszenia — nawet na jednym wątku. @Volatile nic tu nie da, bo problem nie dotyczy widoczności pamięci, tylko atomowości operacji odczyt-modyfikacja-zapis.",
+      "code": "var counter = 0\nList(100) { async { val read = counter; yield(); counter = read + 1 } }.awaitAll()"
+    },
+    {
+      "id": "co-2",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Co jest nie tak z tym blokiem catch?",
+      "options": [
+        "Nic — to poprawna obsługa błędów",
+        "Połyka CancellationException, przez co rodzic uzna anulowaną korutynę za zakończoną poprawnie",
+        "Powinien łapać Throwable zamiast Exception",
+        "Brakuje bloku finally"
+      ],
+      "correctIndex": 1,
+      "explanation": "CancellationException to sygnał sterujący structured concurrency, nie błąd domenowy. Połknięcie go rozbija propagację anulowania: scope myśli, że dziecko zakończyło pracę normalnie. Zawsze przepuszczaj go dalej (catch (e: CancellationException) { throw e }) przed ogólnym catch.",
+      "code": "try {\n    repository.getUsers(query)\n} catch (e: Exception) {\n    showError(e.message)\n}"
+    },
+    {
+      "id": "co-3",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Kiedy async { }.await() wywołane natychmiast w następnej linii ma sens?",
+      "options": [
+        "Zawsze — async jest wydajniejszy niż zwykłe wywołanie",
+        "Praktycznie nigdy; nic nie zrównolegla, a dodaje narzut i zmienia propagację wyjątków",
+        "Gdy chcesz uruchomić kod na innym dispatcherze",
+        "Gdy funkcja nie jest oznaczona jako suspend"
+      ],
+      "correctIndex": 1,
+      "explanation": "async ma sens tylko wtedy, gdy uruchamiasz kilka zadań i dopiero potem czekasz na wszystkie. async { X }.await() to skomplikowany sposób napisania X(), który dodatkowo opakowuje wyjątki. Do zmiany dispatchera służy withContext."
+    },
+    {
+      "id": "co-4",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Funkcja suspend repozytorium wykonuje zapytanie sieciowe. Kto odpowiada za przełączenie na Dispatchers.IO?",
+      "options": [
+        "ViewModel — powinien wywołać ją w launch(Dispatchers.IO)",
+        "Sama funkcja, przez withContext(Dispatchers.IO) w środku — ma być bezpieczna do wywołania z Main",
+        "Nikt — korutyny same wybierają odpowiedni wątek",
+        "Warstwa DI, przez wstrzyknięcie dispatchera do ViewModelu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Zasada main-safety: funkcja suspend musi być bezpieczna do wywołania z dowolnego dispatchera, w tym z Main. Wymuszanie na wywołującym znajomości szczegółu implementacyjnego (że coś jest operacją I/O) łamie enkapsulację — po zmianie repozytorium na cache w pamięci wszystkie wywołania byłyby błędne."
+    },
+    {
+      "id": "co-5",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Czym różni się collectLatest od collect przy przetwarzaniu żądań wyszukiwania?",
+      "options": [
+        "collectLatest pomija wartości, collect przetwarza wszystkie",
+        "collectLatest anuluje przetwarzanie poprzedniej wartości, gdy pojawi się nowa",
+        "collectLatest działa asynchronicznie, collect blokuje",
+        "collectLatest deduplikuje identyczne wartości"
+      ],
+      "correctIndex": 1,
+      "explanation": "collectLatest nie pomija wartości — uruchamia blok dla każdej, ale anuluje poprzednie wykonanie, jeśli jeszcze trwa. To chroni przed klasycznym bugiem wyszukiwarek, gdzie wolniejsza odpowiedź na stare zapytanie nadpisuje świeższe wyniki. Odpowiednik operatorowy to flatMapLatest."
+    },
+    {
+      "id": "co-6",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Czym różni się MutableStateFlow.update { } od przypisania .value = ?",
+      "options": [
+        "update jest szybszy, bo pomija powiadamianie subskrybentów",
+        "update wykonuje operację w pętli compare-and-set, więc jest atomowy; .value = to zwykły zapis",
+        "update działa tylko wewnątrz korutyny",
+        "Nie ma różnicy — update to alias na .value ="
+      ],
+      "correctIndex": 1,
+      "explanation": "Wzorzec odczyt-modyfikacja-zapis na .value jest podatny na wyścig dokładnie tak samo jak zwykłe pole. update powtarza lambdę, dopóki zapis się nie powiedzie — dlatego lambda musi być czysta i szybka, bo może wykonać się kilka razy. Zobacz scenariusze StateFlow w zakładce Sync."
+    },
+    {
+      "id": "co-7",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Pętla while (true) { heavyComputation() } w korutynie nie reaguje na anulowanie. Dlaczego?",
+      "options": [
+        "Bo anulowanie działa tylko na Dispatchers.IO",
+        "Bo anulowanie jest kooperacyjne — kod musi sprawdzać isActive albo wywoływać funkcję suspend",
+        "Bo pętla while blokuje Job rodzica",
+        "Bo brakuje adnotacji @Cancellable"
+      ],
+      "correctIndex": 1,
+      "explanation": "Korutyn nie da się zabić z zewnątrz. Anulowanie ustawia flagę, którą kod musi sam sprawdzić — robi to każda funkcja suspend z kotlinx.coroutines oraz ensureActive()/isActive/yield(). Czysto obliczeniowa pętla bez tych wywołań będzie działać do końca mimo anulowania scope'a."
+    },
+    {
+      "id": "co-8",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Do czego służy SupervisorJob i czym różni się od zwykłego Job?",
+      "options": [
+        "Automatycznie ponawia zadania zakończone błędem",
+        "Błąd jednego dziecka nie anuluje pozostałych dzieci ani rodzica",
+        "Pozwala uruchamiać korutyny bez scope'a",
+        "Gwarantuje wykonanie na wątku głównym"
+      ],
+      "correctIndex": 1,
+      "explanation": "W zwykłym Job błąd dziecka anuluje rodzica, a ten pozostałe dzieci. SupervisorJob izoluje awarie — używa go viewModelScope, dzięki czemu błąd jednego zapytania nie zabija całego ekranu. Uwaga: supervisorScope działa tylko dla bezpośrednich dzieci."
+    },
+    {
+      "id": "co-9",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Test z runTest i StandardTestDispatcher nie widzi zdarzenia wysłanego do Channela, mimo advanceUntilIdle(). Najczęstsza przyczyna?",
+      "options": [
+        "Channel został zamknięty przed odbiorem",
+        "Kolektor w backgroundScope startuje leniwie; potrzebny UnconfinedTestDispatcher, żeby odebrał natychmiast",
+        "runTest nie obsługuje kanałów",
+        "advanceUntilIdle nie działa z Channel.BUFFERED"
+      ],
+      "correctIndex": 1,
+      "explanation": "Ze StandardTestDispatcher moment uruchomienia kolektora zależy od kolejności zadań w kolejce — test bywa niedeterministyczny. Uruchomienie kolektora na UnconfinedTestDispatcher(testScheduler) sprawia, że startuje natychmiast i odbiera zdarzenie w chwili wysłania. Ten dokładny problem wystąpił w testach tego projektu.",
+      "code": "backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {\n    viewModel.effects.collect { into += it }\n}"
+    },
+    {
+      "id": "co-10",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Czym różni się Flow (zimny) od StateFlow (gorący)?",
+      "options": [
+        "Flow działa na IO, StateFlow na Main",
+        "Flow wykonuje się od nowa dla każdego kolektora i nie ma wartości; StateFlow zawsze ma wartość i jest współdzielony",
+        "StateFlow nie obsługuje operatorów map i filter",
+        "Flow wymaga korutyny, StateFlow nie"
+      ],
+      "correctIndex": 1,
+      "explanation": "Zimny Flow to przepis: każdy collect uruchamia go osobno. StateFlow to gorący kontener wartości — ma wartość początkową, deduplikuje kolejne równe wartości (distinctUntilChanged wbudowany) i dzieli tę samą wartość między subskrybentów. Dlatego StateFlow nadaje się na stan ekranu, a zwykły Flow na jednorazowe zapytania."
+    },
+    {
+      "id": "co-11",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Dlaczego GlobalScope jest odradzany?",
+      "options": [
+        "Bo nie obsługuje Dispatchers.Main",
+        "Bo korutyna nie ma rodzica — nikt jej nie anuluje, co prowadzi do wycieków i pracy po zamknięciu ekranu",
+        "Bo jest wolniejszy od viewModelScope",
+        "Bo działa tylko w testach"
+      ],
+      "correctIndex": 1,
+      "explanation": "GlobalScope to odpowiednik new Thread() bez referencji: nic go nie anuluje, więc korutyna przeżyje ekran, a nawet całą sesję użytkownika. Łamie structured concurrency. Jeśli praca naprawdę ma przeżyć ekran, użyj scope'a o zasięgu aplikacji z jawnie zarządzanym cyklem życia albo WorkManagera."
+    },
+    {
+      "id": "co-12",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Co robi flowOn(Dispatchers.IO) i na co wpływa?",
+      "options": [
+        "Zmienia dispatcher kolektora (bloku collect)",
+        "Zmienia dispatcher operatorów NAD nim w łańcuchu, nie wpływa na collect",
+        "Przenosi cały łańcuch łącznie z collect na IO",
+        "Jest równoważne z withContext(Dispatchers.IO)"
+      ],
+      "correctIndex": 1,
+      "explanation": "flowOn działa 'w górę' łańcucha — wpływa na emisję i operatory zdefiniowane przed nim. Blok collect wykonuje się zawsze w kontekście wywołującego. To celowe: dzięki temu collect w ViewModelu pozostaje na Main i może bezpiecznie aktualizować stan."
+    },
+    {
+      "id": "rx-1",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Jaki jest odpowiednik RxJava Single<T> w świecie korutyn?",
+      "options": [
+        "Flow<T>",
+        "suspend fun (): T",
+        "StateFlow<T>",
+        "Deferred<T> tworzony przez GlobalScope.async"
+      ],
+      "correctIndex": 1,
+      "explanation": "Single emituje dokładnie jedną wartość albo błąd — to dokładnie semantyka funkcji suspend zwracającej T. Maybe<T> to suspend fun (): T?, a Completable to suspend fun (): Unit. Flow odpowiada Observable/Flowable, czyli strumieniom wielu wartości."
+    },
+    {
+      "id": "rx-2",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Który operator Rx odpowiada flatMapLatest z Flow?",
+      "options": [
+        "flatMap",
+        "concatMap",
+        "switchMap",
+        "combineLatest"
+      ],
+      "correctIndex": 2,
+      "explanation": "switchMap anuluje subskrypcję poprzedniego strumienia wewnętrznego, gdy pojawi się nowa wartość — dokładnie jak flatMapLatest. flatMap odpowiada flatMapMerge (równolegle, bez anulowania), a concatMap to flatMapConcat (sekwencyjnie, z kolejkowaniem)."
+    },
+    {
+      "id": "rx-3",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Główny powód, dla którego Flow wyparł RxJava w nowych projektach Android?",
+      "options": [
+        "Flow ma więcej operatorów",
+        "Structured concurrency — anulowanie dziedziczy się ze scope'a, bez ręcznego zarządzania Disposable",
+        "Flow jest szybszy w benchmarkach",
+        "RxJava nie obsługuje backpressure"
+      ],
+      "correctIndex": 1,
+      "explanation": "W Rx każdą subskrypcję trzeba pamiętać i zwolnić (CompositeDisposable.clear()); zapomniany dispose to klasyczny wyciek. W korutynach anulowanie wynika ze struktury scope'a. Dodatkowo Flow działa w Kotlin Multiplatform, a RxJava jest biblioteką JVM. Rx ma natomiast bogatszy zestaw operatorów i lepsze wsparcie backpressure."
+    },
+    {
+      "id": "rx-4",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Odpowiednik BehaviorSubject<T> w Kotlinie to:",
+      "options": [
+        "MutableSharedFlow<T>()",
+        "MutableStateFlow<T>(initial)",
+        "Channel<T>(CONFLATED)",
+        "callbackFlow { }"
+      ],
+      "correctIndex": 1,
+      "explanation": "BehaviorSubject przechowuje ostatnią wartość i dostarcza ją nowym subskrybentom — to semantyka StateFlow. PublishSubject (tylko nowe wartości, bez historii) odpowiada MutableSharedFlow bez replay. Różnica: StateFlow wymaga wartości początkowej i deduplikuje równe wartości."
+    },
+    {
+      "id": "rx-5",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Migrujesz Single<List<User>> z legacy repozytorium do ViewModelu na korutynach. Najprostsze podejście?",
+      "options": [
+        "Przepisać całe repozytorium na korutyny przed migracją ViewModelu",
+        "Użyć mostu kotlinx-coroutines-rx3: single.await()",
+        "Opakować subskrypcję w suspendCancellableCoroutine ręcznie",
+        "Zablokować wątek przez single.blockingGet()"
+      ],
+      "correctIndex": 1,
+      "explanation": "kotlinx-coroutines-rx3 daje gotowe mosty w obie strony: await() dla Single/Maybe, asFlow() dla Observable, asObservable() w drugą stronę. Pozwala migrować stopniowo, od warstwy prezentacji w dół. blockingGet() blokuje wątek i niweczy sens korutyn, a ręczne suspendCancellableCoroutine to powielanie gotowego kodu."
+    },
+    {
+      "id": "rx-6",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Czym różni się subscribeOn od observeOn w RxJava?",
+      "options": [
+        "subscribeOn dotyczy emisji (źródła), observeOn przełącza wątek dla operatorów poniżej",
+        "subscribeOn dotyczy odbioru, observeOn emisji",
+        "Oba robią to samo, observeOn jest przestarzały",
+        "subscribeOn działa raz, observeOn tylko w Flowable"
+      ],
+      "correctIndex": 0,
+      "explanation": "subscribeOn określa wątek, na którym startuje źródło — liczy się tylko pierwsze wywołanie w łańcuchu. observeOn przełącza wątek dla wszystkiego, co następuje po nim, i może wystąpić wielokrotnie. W korutynach ten podział znika: flowOn działa w górę łańcucha, a collect zawsze wykonuje się w kontekście wywołującego."
+    },
+    {
+      "id": "rx-7",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Czego RxJava ma więcej niż Flow?",
+      "options": [
+        "Wsparcia dla Kotlin Multiplatform",
+        "Backpressure jako pierwszorzędnego pojęcia (Flowable ze strategiami) i bogatszych operatorów czasowych",
+        "Integracji z Compose",
+        "Bezpieczeństwa typów"
+      ],
+      "correctIndex": 1,
+      "explanation": "Flowable ma jawne strategie backpressure (BUFFER, DROP, LATEST), a Rx oferuje dojrzałe operatory czasowe: window, throttleFirst, sample, debounce w wielu wariantach. We Flow część z tego składa się samodzielnie z buffer(), conflate() i sample(). W typowej aplikacji mobilnej rzadko jest to potrzebne."
+    },
+    {
+      "id": "clean-1",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Gdzie powinien znajdować się interfejs UserRepository i dlaczego?",
+      "options": [
+        "W warstwie data, obok implementacji — są ze sobą powiązane",
+        "W warstwie domain — dzięki temu strzałka zależności wskazuje do wewnątrz",
+        "W osobnym module contracts poza warstwami",
+        "W warstwie presentation, bo to ona go używa"
+      ],
+      "correctIndex": 1,
+      "explanation": "To sedno Dependency Inversion. Interfejs w domain sprawia, że data zależy od domeny, a nie odwrotnie. Gdyby interfejs leżał w data, domena musiałaby importować warstwę zewnętrzną i podmiana źródła danych wymagałaby zmian w regułach biznesowych."
+    },
+    {
+      "id": "clean-2",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Use case ma jedną linię: return repository.getUsers(query). Czy to uzasadnia jego istnienie?",
+      "options": [
+        "Nie — to zbędna warstwa, ViewModel powinien wołać repozytorium wprost",
+        "To zależy: jeśli niesie regułę biznesową (sortowanie, filtrowanie, walidację) — tak; jeśli tylko deleguje — bywa nadmiarowy",
+        "Tak, zawsze — każde wywołanie repozytorium wymaga use case'a",
+        "Nie ma znaczenia, to wyłącznie kwestia stylu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Odpowiedź wymaga oceny, nie dogmatu. Use case zarabia na siebie, gdy zawiera regułę wielokrotnego użytku (np. 'ulubieni na górze, potem alfabetycznie') albo łączy kilka źródeł. Czysta delegacja to koszt bez zysku — choć część zespołów akceptuje go dla spójności i łatwiejszego mockowania."
+    },
+    {
+      "id": "clean-3",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "DTO z API jest używane bezpośrednio w warstwie UI. Jaki jest główny problem?",
+      "options": [
+        "Wydajność serializacji",
+        "Zmiana kontraktu API propaguje się przez całą aplikację; domena zależy od szczegółu zewnętrznego",
+        "DTO nie da się renderować w Compose",
+        "Naruszenie zasady Single Responsibility"
+      ],
+      "correctIndex": 1,
+      "explanation": "Model domenowy powinien być stabilny i niezależny od tego, jak dane przychodzą z sieci. Bez mapowania DTO→domena każde przemianowanie pola w API wymusza zmiany w UI, testach i logice. Mapper jest jednym punktem, który absorbuje takie zmiany."
+    },
+    {
+      "id": "clean-4",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Co dokładnie mówi 'reguła zależności' w Clean Architecture?",
+      "options": [
+        "Każda warstwa może zależeć wyłącznie od warstwy bezpośrednio pod nią",
+        "Zależności w kodzie źródłowym mogą wskazywać wyłącznie do wewnątrz, ku regułom wyższego poziomu",
+        "Warstwy nie mogą zależeć od siebie nawzajem",
+        "Zależności muszą być wstrzykiwane przez kontener DI"
+      ],
+      "correctIndex": 1,
+      "explanation": "Sformułowanie Roberta Martina: source code dependencies must point only inward. Warstwa wewnętrzna nie może znać niczego z zewnętrznej — ani nazwy klasy, ani formatu danych. Przepływ sterowania może iść w drugą stronę, i właśnie po to stosuje się odwrócenie zależności przez interfejsy."
+    },
+    {
+      "id": "clean-5",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Projekt ma foldery domain/, data/ i presentation/, ale ViewModel importuje klasę Retrofit API. Co to oznacza?",
+      "options": [
+        "Nic złego, jeśli import jest w jednym miejscu",
+        "To nie jest Clean Architecture — liczy się kierunek zależności, nie struktura folderów",
+        "Naruszenie zasady Open/Closed",
+        "Problem wyłącznie estetyczny"
+      ],
+      "correctIndex": 1,
+      "explanation": "Foldery to konwencja; architekturę definiuje graf zależności. ViewModel znający Retrofit oznacza, że presentation zależy bezpośrednio od szczegółu infrastruktury — testy wymagają serwera lub mocków HTTP, a zmiana biblioteki sieciowej dotyka warstwy prezentacji."
+    },
+    {
+      "id": "solid-1",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Klasa czyta plik, parsuje JSON i cache'uje wynik. Którą zasadę łamie i jak to naprawić?",
+      "options": [
+        "Open/Closed — dodać interfejs bazowy",
+        "Single Responsibility — rozdzielić na źródło, parser i repozytorium spinające całość",
+        "Liskov Substitution — wydzielić klasę bazową",
+        "Nie łamie żadnej — to spójna odpowiedzialność 'dostarczanie danych'"
+      ],
+      "correctIndex": 1,
+      "explanation": "Ma trzy powody do zmiany: zmiana formatu danych, zmiana źródła i zmiana polityki cache. Podział na LessonsSource (skąd), LessonsJsonParser (jak zrozumieć) i LessonJsonRepository (spina + cache) sprawia, że parser da się testować bez Androida, a źródło podmienić na sieciowe bez dotykania parsowania."
+    },
+    {
+      "id": "solid-2",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Interfejs UserRepository ma metody getUsers, setFavorite, exportCsv, syncWithCloud i clearCache. Którą zasadę to narusza?",
+      "options": [
+        "Dependency Inversion",
+        "Interface Segregation",
+        "Liskov Substitution",
+        "Open/Closed"
+      ],
+      "correctIndex": 1,
+      "explanation": "Interface Segregation: klient nie powinien zależeć od metod, których nie używa. Ekran listy potrzebuje dwóch metod, ale fake w testach musi zaimplementować pięć. Rozwiązanie: kilka wąskich interfejsów, ewentualnie implementowanych przez jedną klasę — jak UserRepository + NetworkFailureSwitch w tym projekcie."
+    },
+    {
+      "id": "solid-3",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Implementacja interfejsu rzuca UnsupportedOperationException w jednej z metod. Która zasada jest złamana?",
+      "options": [
+        "Single Responsibility",
+        "Liskov Substitution",
+        "Interface Segregation",
+        "Open/Closed"
+      ],
+      "correctIndex": 1,
+      "explanation": "LSP mówi, że podtyp musi być użyteczny wszędzie tam, gdzie typ bazowy — bez zaskoczeń. Rzucanie wyjątku zmusza klienta do sprawdzania konkretnego typu (if (repo is ReadOnly)), co niweczy sens abstrakcji. Zwykle jest to też sygnał złamania ISP: interfejs jest za szeroki."
+    },
+    {
+      "id": "solid-4",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "sealed interface wymusza aktualizację każdego when po dodaniu nowego podtypu. Czy to łamie Open/Closed?",
+      "options": [
+        "Tak — modyfikujemy istniejący kod zamiast go rozszerzać",
+        "To świadomy kompromis: tracimy część OCP, zyskujemy kontrolę kompilatora nad kompletnością",
+        "Nie, bo when nie jest częścią klasy",
+        "Tak, dlatego sealed należy zastępować dziedziczeniem otwartym"
+      ],
+      "correctIndex": 1,
+      "explanation": "To realny kompromis, nie ślepe stosowanie reguły. Hierarchia otwarta lepiej spełnia OCP, ale pozwala na cichy błąd w runtime, gdy zapomnisz obsłużyć nowy typ. sealed zamienia ten błąd na błąd kompilacji — przy modelowaniu skończonych zbiorów (stany, bloki treści, intencje) to zwykle korzystniejszy wybór."
+    },
+    {
+      "id": "solid-5",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Który objaw najczęściej zdradza złamanie Dependency Inversion?",
+      "options": [
+        "Klasa ma więcej niż 200 linii",
+        "Test jednostkowy wymaga sieci, bazy albo Contextu Androida",
+        "Interfejs ma więcej niż 5 metod",
+        "Metoda przyjmuje więcej niż 3 parametry"
+      ],
+      "correctIndex": 1,
+      "explanation": "Jeśli logika wysokiego poziomu zależy bezpośrednio od konkretów infrastruktury, nie da się jej odizolować w teście. Konieczność uruchomienia emulatora, serwera albo bazy do przetestowania reguły biznesowej to najbardziej praktyczny wskaźnik złamania DIP."
+    },
+    {
+      "id": "cmp-1",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Czym różni się remember { } od rememberSaveable { }?",
+      "options": [
+        "rememberSaveable działa tylko z typami prymitywnymi",
+        "remember przeżywa rekompozycję, rememberSaveable dodatkowo zmianę konfiguracji i śmierć procesu",
+        "remember jest wydajniejszy, bo nie serializuje",
+        "Nie ma różnicy poza nazwą"
+      ],
+      "correctIndex": 1,
+      "explanation": "remember cache'uje wartość między rekompozycjami, ale ginie przy obrocie ekranu. rememberSaveable zapisuje ją w Bundle (przez Saver), więc przetrwa zmianę konfiguracji i process death. W MVI oba są rzadko potrzebne dla stanu ekranu — ten mieszka w ViewModelu."
+    },
+    {
+      "id": "cmp-2",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Lista LazyColumn bez parametru key przy usuwaniu elementu ze środka zachowuje się dziwnie. Dlaczego?",
+      "options": [
+        "Bo LazyColumn wymaga key do działania",
+        "Bez stabilnego key Compose identyfikuje elementy po pozycji, więc stan i animacje przypisują się do złych elementów",
+        "Bo brak key wyłącza recykling widoków",
+        "Bo klucz jest potrzebny wyłącznie do animacji"
+      ],
+      "correctIndex": 1,
+      "explanation": "Domyślnie tożsamością elementu jest jego indeks. Po usunięciu elementu ze środka wszystkie kolejne 'przesuwają się', więc stan pamiętany per element (rozwinięcie, scroll, animacja) trafia do niewłaściwego wiersza. key = { it.id } wiąże stan z tożsamością danych, nie z pozycją."
+    },
+    {
+      "id": "cmp-3",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Kiedy uzasadnione jest użycie derivedStateOf?",
+      "options": [
+        "Zawsze przy obliczaniu wartości pochodnej ze stanu",
+        "Gdy z często zmieniającego się stanu wyliczasz wartość zmieniającą się rzadko — ogranicza rekompozycje",
+        "Do przechowywania stanu przeżywającego obrót ekranu",
+        "Do obliczeń w tle poza wątkiem głównym"
+      ],
+      "correctIndex": 1,
+      "explanation": "Klasyczny przykład: listState.firstVisibleItemIndex > 0 dla przycisku 'do góry'. Scroll zmienia się co klatkę, ale wynik boolean rzadko — derivedStateOf ogranicza rekompozycje do momentów faktycznej zmiany. Przy tanich obliczeniach z rzadko zmiennych źródeł to niepotrzebny narzut."
+    },
+    {
+      "id": "cmp-4",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Jak poprawnie zebrać efekty jednorazowe z ViewModelu w Composable?",
+      "options": [
+        "W bloku init funkcji Composable",
+        "W LaunchedEffect z kluczem stabilnym względem instancji ViewModelu",
+        "W remember { }",
+        "Przez collectAsState()"
+      ],
+      "correctIndex": 1,
+      "explanation": "LaunchedEffect uruchamia korutynę powiązaną z cyklem życia kompozycji i anuluje ją przy opuszczeniu — a przy zmianie klucza startuje od nowa. Kluczem powinna być stabilna referencja (viewModel), nie zmienny stan, bo inaczej kolektor restartowałby się przy każdej zmianie i gubił zdarzenia. collectAsState służy do stanu, nie do zdarzeń."
+    },
+    {
+      "id": "cmp-5",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Czym jest stabilność typu (@Stable/@Immutable) w Compose i dlaczego ma znaczenie?",
+      "options": [
+        "Gwarantuje bezpieczeństwo wątkowe typu",
+        "Pozwala Compose pomijać rekompozycję, gdy parametry się nie zmieniły",
+        "Wymusza użycie data class",
+        "Włącza automatyczne zapamiętywanie wyników funkcji"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose pomija rekompozycję, jeśli wszystkie parametry są stabilne i równe poprzednim. Niestabilny typ (np. List z java.util zamiast kotlinx ImmutableList, albo klasa z var) wymusza rekompozycję za każdym razem. Dlatego w MVI State warto trzymać niemutowalne struktury."
+    },
+    {
+      "id": "cmp-6",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Który sposób przekazywania stanu do komponentu ułatwia testy golden i podglądy?",
+      "options": [
+        "Wstrzyknięcie ViewModelu do każdego komponentu",
+        "State hoisting — komponent przyjmuje state i lambdy zdarzeń jako parametry",
+        "Użycie CompositionLocal dla stanu ekranu",
+        "Globalny obiekt stanu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Komponent bezstanowy przyjmujący (state, onIntent) da się wyrenderować z dowolnym stanem — łącznie ze stanem błędu — bez uruchamiania ViewModelu i całej aplikacji. To czyni golden testy trywialnymi: podajesz gotowy State i porównujesz bitmapę. W MVI ten wzorzec wychodzi naturalnie."
+    },
+    {
+      "id": "test-1",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Co dokładnie oznacza 'smoke test'?",
+      "options": [
+        "Test wydajnościowy pod obciążeniem",
+        "Rola testu: wąski zestaw sprawdzeń, czy build nie jest fundamentalnie zepsuty",
+        "Test renderowania UI do bitmapy",
+        "Test uruchamiany wyłącznie na urządzeniu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Smoke test to rola, nie technologia. Odpowiada na pytanie 'czy w ogóle warto uruchamiać resztę testów': czy graf DI się składa, czy ekran startowy się renderuje, czy główna ścieżka przechodzi. Może być testem jednostkowym albo UI — decyduje zakres i moment uruchomienia."
+    },
+    {
+      "id": "test-2",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Czym są testy golden (screenshot) i co wychwytują lepiej niż testy UI?",
+      "options": [
+        "Sprawdzają wydajność renderowania",
+        "Renderują komponent i porównują z zatwierdzonym wzorcem — łapią regresje wizualne (padding, kolory, obcięty tekst)",
+        "Testują logikę biznesową na podstawie zrzutów stanu",
+        "Weryfikują dostępność (accessibility)"
+      ],
+      "correctIndex": 1,
+      "explanation": "Asercja onNodeWithText('Anna').assertIsDisplayed() przejdzie także wtedy, gdy tekst jest biały na białym tle albo wystaje poza ekran. Golden test porównuje piksele. Narzędzia: Paparazzi i Roborazzi (render na JVM, bez emulatora), Compose Preview Screenshot Testing, a na iOS swift-snapshot-testing."
+    },
+    {
+      "id": "test-3",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Dlaczego MVI szczególnie dobrze współgra z testami golden?",
+      "options": [
+        "Bo MVI wymusza użycie Compose",
+        "Bo można podać dowolny State bezpośrednio i wyrenderować go, bez przechodzenia przez interakcje",
+        "Bo State jest automatycznie serializowany do pliku",
+        "Bo reducer generuje zrzuty ekranu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Żeby sfotografować stan błędu w MVVM, trzeba zwykle zasymulować awarię sieci i przeklikać ścieżkę. W MVI wystarczy UsersState(error = 'HTTP 503') i render. Każdy wariant stanu staje się jedną linijką testu."
+    },
+    {
+      "id": "test-4",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "W projekcie KMP masz reducer w commonMain. Gdzie testować jego logikę?",
+      "options": [
+        "Osobno w testach Kotlin i w XCTest w Xcode",
+        "Raz w commonTest — te same testy uruchomią się na JVM i na symulatorze iOS",
+        "Wyłącznie w androidHostTest",
+        "W testach instrumentalnych na obu platformach"
+      ],
+      "correctIndex": 1,
+      "explanation": "Testy w commonTest kompilują się dla każdego targetu: ./gradlew :shared:testAndroidHostTest i :shared:iosSimulatorArm64Test uruchamiają ten sam kod. Duplikowanie tych testów w Swifcie to podwójne utrzymanie bez zysku — w Xcode zostawiamy tylko to, co faktycznie specyficzne dla iOS (warstwa Swift, XCUITest)."
+    },
+    {
+      "id": "test-5",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Test ViewModelu z debounce 350 ms i opóźnieniem sieci 700 ms wykonuje się w milisekundach. Jak?",
+      "options": [
+        "Przez zmniejszenie opóźnień w konfiguracji testowej",
+        "runTest z TestDispatcher używa czasu wirtualnego — advanceTimeBy przesuwa zegar bez realnego czekania",
+        "Przez uruchomienie testów równolegle",
+        "Przez zastąpienie delay funkcją Thread.sleep(0)"
+      ],
+      "correctIndex": 1,
+      "explanation": "TestScheduler wirtualizuje czas: delay(700) kończy się natychmiast po advanceUntilIdle(). Dzięki temu testujesz realne timeouty i debounce bez spowalniania buildu. Modyfikowanie stałych na potrzeby testów byłoby testowaniem innego kodu niż produkcyjny."
+    },
+    {
+      "id": "test-6",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Piszesz test scenariusza demonstrującego race condition. Jak zapewnić powtarzalność?",
+      "options": [
+        "Uruchomić test 1000 razy i sprawdzić, czy choć raz zawiódł",
+        "Wymusić przeplot jawnym punktem zawieszenia (yield) między odczytem a zapisem",
+        "Użyć Thread.sleep z losowym czasem",
+        "Oznaczyć test jako @Flaky i ignorować niestabilność"
+      ],
+      "correctIndex": 1,
+      "explanation": "Test zależny od przypadkowego przeplotu jest niestabilny i bezwartościowy — czasem przejdzie mimo błędu. Wstawienie yield() w krytycznym miejscu czyni wyścig deterministycznym. Tak działają scenariusze w zakładce Sync: zawsze gubią zapisy, na każdej platformie."
+    },
+    {
+      "id": "test-7",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Testujesz ViewModel z Dispatchers.Main. Co należy zrobić w setUp?",
+      "options": [
+        "Nic — Dispatchers.Main działa w testach JVM",
+        "Dispatchers.setMain(testDispatcher) i Dispatchers.resetMain() w tearDown",
+        "Zastąpić viewModelScope własnym CoroutineScope",
+        "Uruchomić test na Robolectric"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dispatchers.Main wymaga Loopera Androida, którego nie ma w testach JVM — bez podmiany dostaniesz ModuleNotFound/IllegalStateException. Dispatchers.setMain z kotlinx-coroutines-test podstawia TestDispatcher, dzięki czemu viewModelScope korzysta z czasu wirtualnego. resetMain zapobiega wyciekaniu stanu między testami."
+    },
+    {
+      "id": "test-8",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Po co testować graf zależności DI?",
+      "options": [
+        "Żeby zmierzyć czas startu aplikacji",
+        "Bo brakująca definicja ujawnia się dopiero w runtime — test zamienia to w błąd buildu",
+        "Bo Koin wymaga testów do działania",
+        "Żeby wygenerować dokumentację modułów"
+      ],
+      "correctIndex": 1,
+      "explanation": "Koin rozwiązuje zależności leniwie, więc brak definicji objawia się dopiero przy pierwszym wejściu na ekran — potencjalnie u użytkownika. Prosty test wołający koin.get() dla kluczowych typów przenosi ten błąd do fazy CI. Graf DI to też kod i też się psuje."
+    },
+    {
+      "id": "mvi-11",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Middleware w MviStore obserwuje redukcje. Dlaczego celowo NIE może zmieniać stanu?",
+      "options": [
+        "Bo działa na innym wątku",
+        "Bo powstałoby drugie, ukryte miejsce mutacji obok reducera",
+        "Bo middleware jest wywoływane przed redukcją",
+        "Bo nie ma dostępu do obiektu State"
+      ],
+      "correctIndex": 1,
+      "explanation": "Cała wartość MVI opiera się na tym, że istnieje dokładnie jedno miejsce przejścia stanu. Middleware zdolne do mutacji zamieniłoby przewidywalny łańcuch w system, w którym stan zmienia się w miejscach niewidocznych na osi czasu. Logowanie, analityka i crash reporting nie potrzebują mutacji."
+    },
+    {
+      "id": "mvi-12",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Reducer zwraca ten sam obiekt stanu (before == after). Jak store może to wykorzystać?",
+      "options": [
+        "Pominąć powiadomienie subskrybentów i nie uruchamiać efektu ubocznego",
+        "Automatycznie ponowić intencję",
+        "Usunąć wpis z osi czasu",
+        "Zgłosić błąd — reducer powinien zawsze zwracać nowy obiekt"
+      ],
+      "correctIndex": 0,
+      "explanation": "StateFlow sam deduplikuje równe wartości, więc UI nie zostanie niepotrzebnie odświeżone. Dodatkowo store może na tej podstawie wnioskować, że intencja została zignorowana (np. klik w trakcie zapisu) i pominąć I/O — dokładnie ten wzorzec stosuje UsersViewModel przy FavoriteToggled."
+    },
+    {
+      "id": "mvi-13",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Ekran detali czyta dane z tego samego ViewModelu co lista. Jaka jest główna zaleta?",
+      "options": [
+        "Oszczędność pamięci",
+        "Brak duplikacji danych — gwiazdka na liście i w detalach nie mogą się rozjechać",
+        "Szybsza nawigacja",
+        "Możliwość użycia tego samego reducera"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dwa niezależne źródła tych samych danych zawsze prędzej czy później się rozsynchronizują — trzeba pamiętać o propagacji każdej zmiany. Jedno źródło prawdy eliminuje całą klasę takich błędów. Kompromis: ekrany są ze sobą sprzężone, więc dla niezależnych funkcji lepiej mieć osobne store'y."
+    },
+    {
+      "id": "mvi-14",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Store ma listę 10 000 elementów. Reducer robi state.copy(users = ...) przy każdej intencji. Czy to problem?",
+      "options": [
+        "Tak, copy kopiuje całą listę — trzeba użyć mutable state",
+        "Nie, copy tworzy nowy obiekt stanu, ale referencje do niezmienionych kolekcji są współdzielone",
+        "Tak, dlatego MVI nie nadaje się do dużych list",
+        "Nie, bo Kotlin optymalizuje copy do mutacji w miejscu"
+      ],
+      "correctIndex": 1,
+      "explanation": "data class copy() wykonuje płytkie kopiowanie — kopiuje referencje, nie zawartość kolekcji. Koszt jest proporcjonalny do liczby pól, nie do rozmiaru danych. Realny koszt pojawia się dopiero przy faktycznej transformacji listy (map/filter), i to niezależnie od wzorca."
+    },
+    {
+      "id": "co-13",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Czym różni się coroutineScope { } od supervisorScope { }?",
+      "options": [
+        "coroutineScope działa na Main, supervisorScope na Default",
+        "W coroutineScope błąd dziecka anuluje rodzeństwo; w supervisorScope dzieci są izolowane",
+        "supervisorScope nie czeka na zakończenie dzieci",
+        "coroutineScope nie może zawierać async"
+      ],
+      "correctIndex": 1,
+      "explanation": "Oba czekają na zakończenie wszystkich dzieci, ale różnią się propagacją błędów. coroutineScope stosuj, gdy wszystkie zadania są potrzebne (brak jednego czyni wynik bezużytecznym). supervisorScope, gdy zadania są niezależne i częściowy wynik ma wartość."
+    },
+    {
+      "id": "co-14",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Co robi operator buffer() we Flow?",
+      "options": [
+        "Grupuje wartości w listy o zadanym rozmiarze",
+        "Pozwala producentowi emitować dalej, gdy konsument jeszcze przetwarza — rozdziela je buforem",
+        "Zapisuje wartości do cache na dysku",
+        "Opóźnia emisję o zadany czas"
+      ],
+      "correctIndex": 1,
+      "explanation": "Domyślnie Flow jest sekwencyjny: emisja czeka na zakończenie collect. buffer() wprowadza kanał między nimi, więc produkcja i konsumpcja biegną współbieżnie — przydatne, gdy oba etapy są kosztowne. Warianty: conflate() (zachowuje tylko najnowszą) i collectLatest (anuluje przetwarzanie)."
+    },
+    {
+      "id": "co-15",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Kiedy withContext(Dispatchers.Main) w ViewModelu jest zbędny?",
+      "options": [
+        "Zawsze — ViewModel nie powinien dotykać Main",
+        "Gdy używasz viewModelScope, który domyślnie działa na Dispatchers.Main.immediate",
+        "Gdy aktualizujesz StateFlow",
+        "Gdy funkcja jest oznaczona suspend"
+      ],
+      "correctIndex": 1,
+      "explanation": "viewModelScope ma domyślnie Dispatchers.Main.immediate, więc kod już wykonuje się na wątku głównym. Dodatkowy withContext(Main) to zbędny narzut. Warto też wiedzieć, że aktualizacja StateFlow jest bezpieczna wątkowo i nie wymaga Main."
+    },
+    {
+      "id": "co-16",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Co się stanie, gdy w launch { } poleci nieobsłużony wyjątek w viewModelScope?",
+      "options": [
+        "Zostanie po cichu zignorowany",
+        "Trafi do CoroutineExceptionHandler, a bez niego wywoła crash aplikacji",
+        "Zostanie automatycznie ponowiony",
+        "Anuluje wszystkie inne korutyny w viewModelScope"
+      ],
+      "correctIndex": 1,
+      "explanation": "launch propaguje wyjątek w górę hierarchii; bez handlera trafia do domyślnego handlera platformy i aplikacja pada. viewModelScope używa SupervisorJob, więc nie anuluje rodzeństwa — ale sam wyjątek nadal wymaga obsługi. W async wyjątek jest przechowywany i rzucany dopiero przy await()."
+    },
+    {
+      "id": "co-17",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Czym różni się Channel.CONFLATED od Channel.BUFFERED?",
+      "options": [
+        "CONFLATED odrzuca nowe wartości gdy bufor pełny, BUFFERED zawiesza",
+        "CONFLATED przechowuje tylko najnowszą wartość, nadpisując poprzednią",
+        "CONFLATED działa tylko z jednym odbiorcą",
+        "Nie ma różnicy dla pojedynczego konsumenta"
+      ],
+      "correctIndex": 1,
+      "explanation": "CONFLATED (pojemność 1, nadpisywanie) jest odpowiedni tam, gdzie liczy się tylko najświeższy stan — np. pozycja scrolla. Dla efektów jednorazowych byłby błędem: dwa szybko po sobie wysłane komunikaty spowodowałyby utratę pierwszego. Dlatego efekty trzymamy w BUFFERED albo UNLIMITED."
+    },
+    {
+      "id": "co-18",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Do czego służy callbackFlow?",
+      "options": [
+        "Do konwersji Flow na callback",
+        "Do opakowania API opartego o callbacki w Flow, z obsługą anulowania przez awaitClose",
+        "Do uruchamiania Flow w tle",
+        "Do łączenia wielu Flow w jeden"
+      ],
+      "correctIndex": 1,
+      "explanation": "callbackFlow pozwala zamienić klasyczne API (listener, BroadcastReceiver, LocationManager) na strumień. Kluczowy jest awaitClose { } — miejsce, w którym wyrejestrowujesz listener przy anulowaniu. Jego brak to wyciek; kompilator zresztą wymusza jego obecność."
+    },
+    {
+      "id": "kmp-7",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Dlaczego kod w commonMain nie może użyć java.time.LocalDate?",
+      "options": [
+        "Bo to API jest przestarzałe",
+        "Bo to klasa JVM, a commonMain musi kompilować się także dla Kotlin/Native",
+        "Bo wymaga minSdk 26",
+        "Bo Kotlin ma własny typ o tej nazwie"
+      ],
+      "correctIndex": 1,
+      "explanation": "commonMain może korzystać wyłącznie z API dostępnego dla wszystkich targetów: kotlin stdlib i bibliotek multiplatformowych. Dla dat służy kotlinx-datetime, dla serializacji kotlinx-serialization, dla I/O okio lub ktor. Alternatywnie expect/actual albo interfejs z implementacjami per platforma."
+    },
+    {
+      "id": "kmp-8",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Framework iOS generowany z modułu KMP eksportuje klasę Kotlin z sealed interface. Jak wygląda to w Swifcie?",
+      "options": [
+        "Jako enum Swift z asocjowanymi wartościami",
+        "Jako protokół z klasami implementującymi — bez wyczerpującego dopasowania w switch",
+        "Jako struct z polem typu",
+        "Nie jest eksportowane"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin sealed nie ma odpowiednika w Objective-C, przez który przechodzi interop. W Swifcie dostajesz protokół i klasy, a switch wymaga gałęzi default — kompilator nie sprawdzi kompletności. Narzędzia takie jak SKIE generują natywne enumy Swift, przywracając wyczerpujące dopasowanie."
+    },
+    {
+      "id": "kmp-9",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Które podejście lepiej nadaje się do wstrzykiwania zależności platformowych w KMP?",
+      "options": [
+        "Zawsze expect/actual",
+        "Interfejs w commonMain + implementacja per platforma wstrzykiwana przez DI",
+        "Statyczny singleton inicjalizowany w Application",
+        "Refleksja"
+      ],
+      "correctIndex": 1,
+      "explanation": "expect/actual jest wygodne dla drobnych rzeczy (nazwa platformy, generator UUID), ale trudno je testować i podmieniać — nie da się zrobić fake'a dla actual. Interfejs w commonMain z implementacjami rejestrowanymi w module DI per platforma daje pełną testowalność i jest zgodny z DIP."
+    },
+    {
+      "id": "rx-8",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Czym różni się Observable od Flowable w RxJava?",
+      "options": [
+        "Observable jest synchroniczny, Flowable asynchroniczny",
+        "Flowable obsługuje backpressure, Observable nie",
+        "Observable emituje jedną wartość, Flowable wiele",
+        "Flowable jest przestarzały"
+      ],
+      "correctIndex": 1,
+      "explanation": "Flowable implementuje Reactive Streams i pozwala konsumentowi sygnalizować, ile wartości może przyjąć (request(n)), ze strategiami BUFFER/DROP/LATEST. Observable emituje bez ograniczeń — przy szybkim producencie i wolnym konsumencie grozi to OutOfMemoryError. Flow rozwiązuje to inaczej: przez zawieszanie emitera."
+    },
+    {
+      "id": "rx-9",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Ten kod ma wyciek pamięci. Gdzie?",
+      "options": [
+        "W operatorze map",
+        "Subskrypcja nie jest nigdzie przechowywana ani zwalniana przy niszczeniu ekranu",
+        "W użyciu Schedulers.io()",
+        "Nie ma wycieku"
+      ],
+      "correctIndex": 1,
+      "explanation": "subscribe() zwraca Disposable, który trzeba zachować i zwolnić (CompositeDisposable.clear() w onDestroy/onCleared). Bez tego subskrypcja żyje dalej, trzymając referencję do widoku. Właśnie ta klasa błędów zniknęła w korutynach dzięki structured concurrency.",
+      "code": "repository.getUsers(query)\n    .subscribeOn(Schedulers.io())\n    .subscribe { users -> view.showUsers(users) }"
+    },
+    {
+      "id": "rx-10",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Odpowiednik Rx doOnNext w Kotlin Flow to:",
+      "options": [
+        "onStart",
+        "onEach",
+        "onCompletion",
+        "transform"
+      ],
+      "correctIndex": 1,
+      "explanation": "onEach wykonuje efekt uboczny dla każdej wartości, przepuszczając ją dalej — dokładnie jak doOnNext. Pokrewne: onStart (doOnSubscribe), onCompletion (doFinally, wykonuje się także przy błędzie i anulowaniu), catch (onErrorResumeNext)."
+    },
+    {
+      "id": "clean-6",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Repozytorium zwraca Result<List<User>> zamiast rzucać wyjątkiem. Zaleta tego podejścia?",
+      "options": [
+        "Lepsza wydajność",
+        "Błąd jest częścią sygnatury, więc kompilator wymusza jego obsługę",
+        "Umożliwia użycie w commonMain",
+        "Automatyczne ponawianie zapytań"
+      ],
+      "correctIndex": 1,
+      "explanation": "Typ Result czyni ścieżkę błędu widoczną w API — trudniej ją przeoczyć niż nieudokumentowany wyjątek. Koszt: więcej ceremonii przy każdym wywołaniu. Uwaga na pułapkę: Result łapie też CancellationException, więc przy korutynach trzeba ją jawnie przepuszczać dalej."
+    },
+    {
+      "id": "clean-7",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Które elementy NIE powinny nigdy pojawić się w warstwie domain?",
+      "options": [
+        "Interfejsy repozytoriów",
+        "Adnotacje @Serializable, @Entity, typy Retrofit i klasy Androida",
+        "Klasy wyjątków domenowych",
+        "Modele biznesowe"
+      ],
+      "correctIndex": 1,
+      "explanation": "Domena musi być niezależna od frameworków — inaczej zmiana biblioteki serializacji czy bazy wymusza zmiany w regułach biznesowych, a testów nie da się uruchomić bez tych bibliotek. W KMP dochodzi twardsze ograniczenie: klasy Androida w domenie uniemożliwiłyby kompilację dla iOS."
+    },
+    {
+      "id": "clean-8",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Mapowanie DTO → model domenowy powinno znajdować się w:",
+      "options": [
+        "Warstwie domain, bo zna model docelowy",
+        "Warstwie data — to ona zna oba formaty i absorbuje zmiany kontraktu API",
+        "Warstwie presentation, przy renderowaniu",
+        "Osobnym module mapperów zależnym od obu warstw"
+      ],
+      "correctIndex": 1,
+      "explanation": "Mapper musi znać DTO, więc nie może leżeć w domenie (która nie zna warstwy data). Umieszczenie go w data sprawia, że zmiana kontraktu API zatrzymuje się na granicy jednej warstwy — reszta aplikacji jej nie odczuwa."
+    },
+    {
+      "id": "solid-6",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Klasa przyjmuje w konstruktorze 8 zależności. Co to najczęściej sygnalizuje?",
+      "options": [
+        "Prawidłowe stosowanie Dependency Injection",
+        "Naruszenie Single Responsibility — klasa robi za dużo",
+        "Konieczność użycia Service Locatora",
+        "Brak interfejsów dla zależności"
+      ],
+      "correctIndex": 1,
+      "explanation": "Liczba zależności jest dobrym przybliżeniem liczby odpowiedzialności. Ośmiu współpracowników zwykle oznacza kilka niezależnych zadań, które da się wydzielić. Zamiana konstruktora na Service Locator ukrywa problem zamiast go rozwiązać — zależności znikają z sygnatury, ale nie z kodu."
+    },
+    {
+      "id": "solid-7",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Czym jest zasada 'composition over inheritance' i jak wiąże się z SOLID?",
+      "options": [
+        "To alternatywa dla SOLID",
+        "Kompozycja daje elastyczność bez sztywnej hierarchii, wspierając LSP i OCP",
+        "Dotyczy wyłącznie języków bez dziedziczenia wielokrotnego",
+        "Wymaga stosowania wzorca Dekorator"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dziedziczenie tworzy najsilniejsze możliwe sprzężenie i łatwo prowadzi do naruszeń LSP (podklasa zmieniająca kontrakt). Kompozycja — wstrzyknięcie współpracownika przez interfejs — pozwala wymieniać zachowanie bez zmiany hierarchii. W Kotlinie klasy są domyślnie final właśnie dlatego."
+    },
+    {
+      "id": "cmp-7",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Dlaczego nie należy tworzyć ViewModelu przez remember { MyViewModel() }?",
+      "options": [
+        "Bo remember nie działa z klasami",
+        "Bo ViewModel powinien żyć w ViewModelStore — inaczej nie przeżyje zmiany konfiguracji i nie zostanie posprzątany",
+        "Bo remember wymaga klucza",
+        "Bo ViewModel musi być singletonem"
+      ],
+      "correctIndex": 1,
+      "explanation": "remember przywiązuje obiekt do kompozycji, nie do cyklu życia ekranu. Po obrocie ekranu powstałby nowy ViewModel — utrata stanu i osi czasu w MVI — a viewModelScope nigdy nie zostałby anulowany. viewModel()/koinViewModel() wiążą instancję z ViewModelStore."
+    },
+    {
+      "id": "cmp-8",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Czym jest recomposition scope i dlaczego wpływa na wydajność?",
+      "options": [
+        "Zakresem widoczności zmiennych w Composable",
+        "Najmniejszym fragmentem UI, który Compose potrafi odświeżyć niezależnie",
+        "Wątkiem, na którym działa rekompozycja",
+        "Limitem liczby rekompozycji na sekundę"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose odświeża najmniejszy możliwy zakres czytający zmieniony stan. Odczyt stanu wysoko w drzewie (np. w rodzicu całego ekranu) rozszerza ten zakres na całe poddrzewo. Dlatego stan warto czytać jak najniżej, a do przekazywania używać lambd zamiast wartości (deferred reads)."
+    },
+    {
+      "id": "cmp-9",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Modifier.clickable dodany po Modifier.padding zachowuje się inaczej niż przed. Dlaczego?",
+      "options": [
+        "To błąd Compose",
+        "Kolejność modyfikatorów ma znaczenie — określa, czy padding należy do obszaru klikalnego",
+        "clickable zawsze musi być pierwszy",
+        "padding resetuje wcześniejsze modyfikatory"
+      ],
+      "correctIndex": 1,
+      "explanation": "Modifier tworzy uporządkowany łańcuch. padding().clickable() sprawia, że obszar klikalny NIE obejmuje paddingu, a clickable().padding() — obejmuje. To częste źródło problemów z dostępnością: zbyt mały obszar dotyku."
+    },
+    {
+      "id": "test-9",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Piramida testów mówi, że testów UI powinno być najmniej. Główny powód?",
+      "options": [
+        "Są najtrudniejsze do napisania",
+        "Są najwolniejsze i najbardziej kruche — a przy błędzie najmniej precyzyjnie wskazują przyczynę",
+        "Nie wykrywają regresji",
+        "Wymagają płatnych narzędzi"
+      ],
+      "correctIndex": 1,
+      "explanation": "Test UI zawodzący po zmianie w warstwie danych nie mówi, gdzie leży błąd — trzeba go szukać w całym stosie. Test jednostkowy wskazuje funkcję. Do tego dochodzi czas (minuty vs milisekundy) i kruchość: animacje, timeouty i różnice urządzeń dają fałszywe alarmy."
+    },
+    {
+      "id": "test-10",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Dlaczego w testach UI Compose lepiej używać testTag niż wyszukiwania po tekście?",
+      "options": [
+        "testTag jest szybszy",
+        "Tekst zmienia się przy tłumaczeniach i zmianach copy, przez co testy pękają bez zmiany logiki",
+        "onNodeWithText nie działa z LazyColumn",
+        "testTag jest wymagany przez Espresso"
+      ],
+      "correctIndex": 1,
+      "explanation": "Test sprawdzający logikę nie powinien zależeć od brzmienia komunikatu. Zmiana 'Spróbuj ponownie' na 'Ponów' to zmiana copy, a nie zachowania. testTag daje stabilny identyfikator. Wyjątek: gdy testujesz właśnie treść komunikatu, asercja na tekście jest właściwa."
+    },
+    {
+      "id": "test-11",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Co jest największym zagrożeniem dla wartości testów golden?",
+      "options": [
+        "Duży rozmiar plików referencyjnych",
+        "Bezrefleksyjne zatwierdzanie nowych wzorców, przez co test zawsze przechodzi",
+        "Różnice w wersjach Compose",
+        "Brak wsparcia dla dark mode"
+      ],
+      "correctIndex": 1,
+      "explanation": "'Update all snapshots' po każdym czerwonym teście zamienia go w atrapę. Golden test wymaga świadomego przeglądu różnicy: czy to zamierzona zmiana designu, czy regresja. Bez tej dyscypliny lepiej takich testów nie mieć niż mieć fałszywe poczucie bezpieczeństwa."
+    },
+    {
+      "id": "test-12",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Test integracyjny ViewModelu używa prawdziwego repozytorium z opóźnieniem 700 ms. Co jest nie tak?",
+      "options": [
+        "Nic, to poprawny test integracyjny",
+        "Test zależy od realnego czasu — powinien używać fake'a lub czasu wirtualnego",
+        "Powinien używać Mockito zamiast prawdziwej implementacji",
+        "700 ms to za mało na stabilny test"
+      ],
+      "correctIndex": 1,
+      "explanation": "Realny czas czyni testy wolnymi i kruchymi (timeouty na wolniejszym CI). Fake repozytorium z kontrolowanym opóźnieniem plus TestDispatcher dają pełną kontrolę: sprawdzisz debounce, anulowanie i timeouty w milisekundach. Prawdziwe implementacje zostaw testom E2E."
+    },
+    {
+      "id": "ds-1",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Klasa jest kluczem w HashMap. Nadpisano equals, ale nie hashCode. Co się stanie?",
+      "options": [
+        "Kompilator zgłosi błąd",
+        "map.get(key) zwróci null mimo istnienia równego obiektu — trafia do innego kubełka",
+        "HashMap zadziała, tylko wolniej",
+        "Obiekty będą nadpisywać się nawzajem"
+      ],
+      "correctIndex": 1,
+      "explanation": "HashMap najpierw liczy hashCode, żeby wybrać kubełek, a dopiero w nim porównuje przez equals. Różne hashCode dla równych obiektów oznaczają szukanie w złym kubełku — wpis staje się nieosiągalny, choć fizycznie jest w mapie. Kontrakt: równe obiekty MUSZĄ mieć równy hashCode (odwrotnie już nie).",
+      "code": "class Key(val id: String) {\n    override fun equals(other: Any?) = other is Key && other.id == id\n    // brak hashCode()!\n}"
+    },
+    {
+      "id": "ds-2",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Obiekt użyty jako klucz w HashMap został zmutowany po wstawieniu (zmieniło się pole wpływające na hashCode). Skutek?",
+      "options": [
+        "Mapa automatycznie przeliczy pozycję",
+        "Wpis staje się nieosiągalny — jest w starym kubełku, a szukamy w nowym",
+        "Zostanie rzucony ConcurrentModificationException",
+        "Nic — HashMap trzyma kopię klucza"
+      ],
+      "correctIndex": 1,
+      "explanation": "HashMap wylicza kubełek tylko przy wstawianiu. Mutacja klucza sprawia, że obiekt zostaje fizycznie w starym miejscu, a get() szuka w nowym. Wpis jest w mapie (widać go w iteracji), ale nieosiągalny przez klucz. Dlatego klucze powinny być niemutowalne — w Kotlinie: data class z samymi val."
+    },
+    {
+      "id": "ds-3",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Jaka jest złożoność get() w HashMap w przypadku pesymistycznym (Java 8+)?",
+      "options": [
+        "O(1) zawsze",
+        "O(log n) — kubełek degeneruje się do drzewa czerwono-czarnego",
+        "O(n) zawsze",
+        "O(n log n)"
+      ],
+      "correctIndex": 1,
+      "explanation": "Średnio O(1), ale przy kolizjach kubełek jest listą — dawniej dawało to O(n). Od Java 8 kubełek z ponad 8 wpisami zamienia się w drzewo zbalansowane, więc pesymistycznie jest O(log n). Wymaga to jednak, by klucze były Comparable; dla innych typów degradacja bywa gorsza."
+    },
+    {
+      "id": "ds-4",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Kiedy LinkedHashMap jest lepszym wyborem niż HashMap?",
+      "options": [
+        "Zawsze — jest szybsza",
+        "Gdy potrzebujesz przewidywalnej kolejności iteracji lub cache LRU (accessOrder = true)",
+        "Gdy klucze są liczbami",
+        "Gdy mapa jest współdzielona między wątkami"
+      ],
+      "correctIndex": 1,
+      "explanation": "LinkedHashMap utrzymuje listę dwukierunkową wpisów, dając kolejność wstawiania (lub dostępu przy accessOrder=true). Ta druga opcja plus removeEldestEntry to klasyczna implementacja cache LRU w kilkunastu liniach. Koszt: większe zużycie pamięci na wskaźniki."
+    },
+    {
+      "id": "ds-5",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Implementujesz cache LRU. Która struktura daje O(1) dla get i put?",
+      "options": [
+        "ArrayList z sortowaniem po czasie dostępu",
+        "HashMap + lista dwukierunkowa (albo LinkedHashMap z accessOrder)",
+        "TreeMap z timestampem jako kluczem",
+        "PriorityQueue"
+      ],
+      "correctIndex": 1,
+      "explanation": "HashMap daje O(1) wyszukiwanie, lista dwukierunkowa O(1) przenoszenie węzła na początek i usuwanie z końca. Sama lista wymagałaby O(n) na wyszukanie, samo drzewo O(log n). To klasyczne zadanie rekrutacyjne — a w Javie/Kotlinie gotowe rozwiązanie daje LinkedHashMap."
+    },
+    {
+      "id": "ds-6",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Czym różni się strategia cache LRU od LFU?",
+      "options": [
+        "LRU usuwa najstarszy wpis, LFU największy",
+        "LRU usuwa najdawniej używany, LFU najrzadziej używany",
+        "LRU działa w pamięci, LFU na dysku",
+        "To dwie nazwy tego samego algorytmu"
+      ],
+      "correctIndex": 1,
+      "explanation": "LRU patrzy na CZAS ostatniego dostępu, LFU na LICZBĘ dostępów. LFU lepiej chroni elementy stale popularne, ale cierpi na problem 'cache pollution': element popularny w przeszłości blokuje miejsce mimo braku bieżącego ruchu. Dlatego stosuje się warianty z oknem czasowym albo zanikaniem licznika."
+    },
+    {
+      "id": "ds-7",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Cache w repozytorium przechowuje wyniki bezterminowo. Jakie jest główne ryzyko?",
+      "options": [
+        "Wyciek pamięci i serwowanie nieaktualnych danych bez możliwości unieważnienia",
+        "Spowolnienie odczytów",
+        "Naruszenie zasady Single Responsibility",
+        "Brak — cache zawsze poprawia działanie"
+      ],
+      "correctIndex": 1,
+      "explanation": "Cache bez polityki eksmisji i unieważniania rośnie w nieskończoność i z czasem serwuje nieaktualne dane. Potrzebne są: ograniczenie rozmiaru (LRU), TTL albo unieważnianie zdarzeniem (po zapisie). W tym projekcie cache lekcji jest bezterminowy świadomie — treść jest niezmienna w trakcie działania aplikacji."
+    },
+    {
+      "id": "ds-8",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Czym jest 'cache stampede' (thundering herd) i jak mu zapobiec?",
+      "options": [
+        "Przepełnieniem cache przez zbyt duże obiekty",
+        "Lawiną równoległych zapytań po wygaśnięciu wpisu — zapobiega się deduplikacją żądań",
+        "Kolizją kluczy w HashMap",
+        "Zbyt częstym czyszczeniem cache"
+      ],
+      "correctIndex": 1,
+      "explanation": "Gdy popularny wpis wygasa, wszystkie równoległe żądania trafiają do źródła jednocześnie. Rozwiązania: pojedynczy 'lot' na klucz (mutex per klucz lub współdzielony Deferred), odświeżanie w tle przed wygaśnięciem, albo losowy rozrzut TTL. W korutynach naturalnie pasuje mapa klucz → Deferred."
+    },
+    {
+      "id": "ds-9",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Kiedy warto użyć SparseArray zamiast HashMap<Integer, V> na Androidzie?",
+      "options": [
+        "Zawsze — SparseArray jest szybsza",
+        "Przy małych i średnich kolekcjach z kluczami int — unika autoboxingu i alokacji Entry",
+        "Gdy klucze są typu String",
+        "Gdy kolekcja jest współdzielona między wątkami"
+      ],
+      "correctIndex": 1,
+      "explanation": "SparseArray trzyma dwie tablice (int[] i Object[]) i szuka przez wyszukiwanie binarne — brak boxingu i obiektów Entry. Zysk pamięciowy jest realny przy setkach wpisów, ale wyszukiwanie to O(log n), a wstawianie w środek wymaga przesuwania tablicy. Przy tysiącach wpisów HashMap zwykle wygrywa."
+    },
+    {
+      "id": "ds-10",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Jaka jest złożoność contains() dla List i dla Set?",
+      "options": [
+        "Obie O(1)",
+        "List O(n), Set (hash) O(1)",
+        "List O(log n), Set O(n)",
+        "Obie O(n)"
+      ],
+      "correctIndex": 1,
+      "explanation": "List musi przejrzeć elementy po kolei. HashSet liczy hashCode i sprawdza jeden kubełek. To najczęstsza pojedyncza optymalizacja w kodzie: pętla z listOf(...).contains(x) w środku daje O(n*m), zamiana na Set robi z tego O(n). W tym projekcie savingFavorites jest zbiorem właśnie z tego powodu."
+    },
+    {
+      "id": "ds-11",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Czym różni się MutableList od List w Kotlinie na poziomie runtime?",
+      "options": [
+        "List jest niemutowalna i chroniona przed zmianą przez inne referencje",
+        "To ten sam obiekt — List daje jedynie interfejs tylko do odczytu, nie gwarancję niezmienności",
+        "List jest kopiowana przy każdym przypisaniu",
+        "List jest zawsze implementowana przez tablicę"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin rozróżnia interfejsy read-only i mutable, ale pod spodem to zwykle ta sama ArrayList. Rzutowanie List na MutableList (lub przekazanie tej samej instancji) pozwala ją zmienić 'za plecami' posiadacza referencji. Prawdziwą niezmienność dają kotlinx.collections.immutable albo defensywna kopia."
+    },
+    {
+      "id": "ds-12",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Który typ kolekcji najlepiej nadaje się na stan MVI trzymający listę w Compose?",
+      "options": [
+        "MutableList — pozwala na aktualizacje w miejscu",
+        "ImmutableList / PersistentList — jest stabilna dla Compose, więc nie wymusza rekompozycji",
+        "Array — najlepsza wydajność",
+        "Sequence — leniwa ewaluacja"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose uznaje List za typ niestabilny (nie wie, czy pod spodem nie ma mutowalnej implementacji), więc komponent przyjmujący List rekomponuje się nawet przy identycznej zawartości. kotlinx.collections.immutable dostarcza typy oznaczone jako stabilne. To realna optymalizacja przy dużych listach."
+    },
+    {
+      "id": "ds-13",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Po co Kotlin wymaga, by data class miała wszystkie pola w konstruktorze do equals/hashCode?",
+      "options": [
+        "Żeby ograniczyć liczbę pól",
+        "Bo generowane equals/hashCode uwzględniają tylko parametry konstruktora — pola w ciele są ignorowane",
+        "Bo pola w ciele nie mogą być val",
+        "To ograniczenie kompilatora bez uzasadnienia"
+      ],
+      "correctIndex": 1,
+      "explanation": "To częste źródło subtelnych błędów: pole zadeklarowane w ciele klasy nie trafia do equals, hashCode ani copy. Dwa obiekty różniące się tylko tym polem będą 'równe', co psuje zachowanie w Set, jako klucz mapy i przy porównaniu stanów w MVI."
+    },
+    {
+      "id": "ds-14",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Cache przechowuje obiekty w polu klasy w KMP. Na co trzeba uważać przy wielu wątkach?",
+      "options": [
+        "Na nic — Kotlin/Native zamraża obiekty automatycznie",
+        "Na wyścig przy odczycie i zapisie — potrzebna atomowość lub ograniczenie do jednego dispatchera",
+        "Cache nie działa w Kotlin/Native",
+        "Trzeba użyć @Volatile na każdej platformie"
+      ],
+      "correctIndex": 1,
+      "explanation": "Po wprowadzeniu nowego modelu pamięci w Kotlin/Native współdzielenie stanu jest dozwolone, ale nie staje się przez to bezpieczne. Wzorzec 'sprawdź cache, jeśli pusty pobierz i zapisz' ma klasyczny wyścig: dwa wywołania mogą pobrać dane dwukrotnie. Rozwiązania: Mutex, atomowe referencje lub współdzielony Deferred."
+    },
+    {
+      "id": "ds-15",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Czym różni się Sequence od List przy łańcuchu map { }.filter { }.first()?",
+      "options": [
+        "Sequence jest zawsze szybsza",
+        "List tworzy pośrednie kolekcje na każdym kroku; Sequence przetwarza element po elemencie i przerywa po pierwszym trafieniu",
+        "Sequence działa asynchronicznie",
+        "Nie ma różnicy — kompilator optymalizuje oba przypadki"
+      ],
+      "correctIndex": 1,
+      "explanation": "Na liście każdy operator tworzy nową kolekcję i przetwarza wszystkie elementy. Sequence jest leniwa: przepuszcza pojedynczy element przez cały łańcuch i kończy po znalezieniu wyniku. Zysk rośnie z rozmiarem kolekcji i długością łańcucha, ale przy małych kolekcjach narzut Sequence bywa większy niż oszczędność."
+    },
+    {
+      "id": "ds-16",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Jaki jest właściwy sposób unieważnienia cache po zapisie danych?",
+      "options": [
+        "Wyczyścić cały cache przy każdym zapisie",
+        "Unieważnić dotknięty wpis lub zaktualizować go zapisaną wartością",
+        "Ustawić bardzo krótki TTL",
+        "Nie unieważniać — dane same się odświeżą"
+      ],
+      "correctIndex": 1,
+      "explanation": "Czyszczenie całości działa, ale marnuje poprawne wpisy i powoduje falę zapytań. Precyzyjne unieważnienie (albo write-through: zapis do źródła i cache jednocześnie) utrzymuje spójność bez utraty wydajności. Krótki TTL to obejście, które nie rozwiązuje problemu odczytu nieaktualnych danych tuż po zapisie."
+    },
+    {
+      "id": "kt-1",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Czym różni się inline fun z reified od zwykłej funkcji generycznej?",
+      "options": [
+        "reified przyspiesza wywołanie",
+        "reified zachowuje typ w czasie wykonania — można użyć is T i T::class mimo type erasure",
+        "reified działa tylko z typami prostymi",
+        "To synonim @JvmStatic"
+      ],
+      "correctIndex": 1,
+      "explanation": "Generyki JVM podlegają wymazywaniu typów, więc w zwykłej funkcji T nie istnieje w runtime. inline wkleja ciało w miejsce wywołania, gdzie typ jest znany — dzięki temu reified pozwala napisać inline fun <reified T> Gson.fromJson(json: String): T. Koszt: rozrost kodu i brak możliwości wywołania z Javy."
+    },
+    {
+      "id": "kt-2",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Czym różni się lateinit var od by lazy { }?",
+      "options": [
+        "lazy działa tylko z var, lateinit z val",
+        "lateinit wymaga ręcznej inicjalizacji i pozwala na reassign; lazy inicjalizuje się raz przy pierwszym odczycie",
+        "lateinit jest thread-safe, lazy nie",
+        "Nie ma różnicy poza składnią"
+      ],
+      "correctIndex": 1,
+      "explanation": "lateinit var służy do wstrzykiwania zależności lub inicjalizacji w onCreate — dostęp przed przypisaniem rzuca UninitializedPropertyAccessException. by lazy jest val, liczy wartość przy pierwszym użyciu i domyślnie jest synchronizowana (LazyThreadSafetyMode.SYNCHRONIZED). lateinit nie działa z typami prostymi."
+    },
+    {
+      "id": "kt-3",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Do czego służy inline class (value class) i jaki jest jej główny zysk?",
+      "options": [
+        "Do tworzenia klas niemutowalnych",
+        "Do opakowania wartości bez narzutu alokacji — kompilator inlinuje ją do typu bazowego",
+        "Do przyspieszenia serializacji",
+        "Do zastąpienia enum"
+      ],
+      "correctIndex": 1,
+      "explanation": "value class UserId(val value: String) daje bezpieczeństwo typów (nie pomylisz UserId z OrderId) bez tworzenia obiektu w runtime — kompilator używa String bezpośrednio. Boxing następuje jednak przy użyciu jako typ generyczny, nullable albo przy rzutowaniu na interfejs."
+    },
+    {
+      "id": "kt-4",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Kiedy Kotlin zgłosi błąd 'Type mismatch' przy generykach z out?",
+      "options": [
+        "Gdy typ jest nullable",
+        "Przy próbie zapisu do struktury kowariantnej — out oznacza tylko produkcję wartości",
+        "Gdy generyk jest reified",
+        "Przy dziedziczeniu z klasy abstrakcyjnej"
+      ],
+      "correctIndex": 1,
+      "explanation": "out T (kowariancja) pozwala traktować List<Dog> jako List<Animal>, ale wyłącznie do odczytu — dopisanie Cat złamałoby bezpieczeństwo typów. Symetrycznie in T (kontrawariancja) pozwala tylko konsumować. Reguła PECS: Producer Extends, Consumer Super."
+    },
+    {
+      "id": "kt-5",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Czym różni się sealed class od sealed interface w Kotlinie?",
+      "options": [
+        "sealed interface nie może mieć podklas",
+        "Klasa może implementować wiele sealed interface, ale dziedziczyć tylko z jednej sealed class",
+        "sealed interface nie działa w when",
+        "sealed class jest przestarzała"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dziedziczenie jest pojedyncze, implementacja interfejsów wielokrotna. Dlatego sealed interface pozwala na krzyżowe hierarchie — w tym projekcie UsersIntent to sealed interface z zagnieżdżonymi Ui i Internal. Oba dają kompilatorowi wiedzę o kompletności when."
+    },
+    {
+      "id": "kt-6",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Co robi operator ?: (elvis) w połączeniu z return?",
+      "options": [
+        "Rzuca wyjątek gdy wartość jest null",
+        "Pozwala na wczesne wyjście z funkcji przy null — 'val x = y ?: return'",
+        "Konwertuje null na wartość domyślną typu",
+        "Jest równoważny z !!"
+      ],
+      "correctIndex": 1,
+      "explanation": "val user = users.firstOrNull { it.id == id } ?: return to idiomatyczny guard clause: dalej kompilator wie, że user nie jest nullem (smart cast). Warianty: ?: return null, ?: error('...'), ?: throw. To czytelniejsze niż zagnieżdżone if (x != null)."
+    },
+    {
+      "id": "kt-7",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Kiedy smart cast NIE zadziała mimo sprawdzenia if (x != null)?",
+      "options": [
+        "Gdy x jest lokalną zmienną val",
+        "Gdy x to var właściwość klasy, którą mógłby zmienić inny wątek między sprawdzeniem a użyciem",
+        "Gdy x jest typu generycznego",
+        "Smart cast działa zawsze"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kompilator odmawia smart castu dla var właściwości (zwłaszcza z innego modułu lub z custom getterem), bo nie może zagwarantować, że wartość nie zmieni się między sprawdzeniem a użyciem. Rozwiązanie: przypisz do lokalnego val (val local = state.error ?: return) — dokładnie ten wzorzec stosuje się przy renderowaniu stanu."
+    },
+    {
+      "id": "kt-8",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Czym różni się apply od also, a run od let?",
+      "options": [
+        "apply/run zwracają lambdę, also/let odbiornik",
+        "apply i run operują na this, also i let na it; apply/also zwracają odbiornik, run/let wynik lambdy",
+        "Wszystkie robią to samo",
+        "let działa tylko z typami nullable"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dwie osie: sposób odwołania (this vs it) i wartość zwracana (odbiornik vs wynik lambdy). apply — konfiguracja obiektu (this, zwraca obiekt). also — efekt uboczny, np. log (it, zwraca obiekt). let — transformacja i obsługa null (it, zwraca wynik). run — obliczenie na obiekcie (this, zwraca wynik)."
+    },
+    {
+      "id": "kt-9",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Co się stanie przy wywołaniu funkcji z domyślnym parametrem z kodu Java?",
+      "options": [
+        "Java użyje wartości domyślnej",
+        "Java musi podać wszystkie parametry, chyba że dodano @JvmOverloads",
+        "Kod się nie skompiluje",
+        "Zostanie przekazany null"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin generuje jedną metodę ze wszystkimi parametrami plus syntetyczną metodę pomocniczą, której Java nie użyje wprost. @JvmOverloads generuje przeciążenia dla każdej kombinacji. To ważne przy pisaniu bibliotek konsumowanych z Javy — częsty temat na rozmowie."
+    },
+    {
+      "id": "kt-10",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Czym jest 'delegated property' i jaki jest klasyczny przykład użycia?",
+      "options": [
+        "Właściwością przekazaną w konstruktorze",
+        "Właściwością, której get/set deleguje do innego obiektu — np. by lazy, by viewModels, by remember",
+        "Właściwością chronioną przed zmianą",
+        "Aliasem dla innej właściwości"
+      ],
+      "correctIndex": 1,
+      "explanation": "Delegat implementuje getValue/setValue, więc pozwala wpiąć logikę w dostęp do właściwości. Standardowe: lazy, observable, vetoable, mapa. Na Androidzie: by viewModels(), by remember, by collectAsState — dzięki delegatom kod czyta się jak zwykły dostęp do pola."
+    },
+    {
+      "id": "kt-11",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Co robi funkcja `takeIf` i kiedy jest idiomatyczna?",
+      "options": [
+        "Pobiera pierwszy element spełniający warunek",
+        "Zwraca odbiornik gdy predykat jest spełniony, w przeciwnym razie null — dobrze łączy się z elvisem",
+        "Sprawdza typ obiektu",
+        "Jest odpowiednikiem filter dla pojedynczej wartości"
+      ],
+      "correctIndex": 1,
+      "explanation": "input.takeIf { it.isNotBlank() } ?: return zastępuje if (input.isBlank()) return. Bliźniacza takeUnless odwraca warunek. Nadużywanie prowadzi jednak do gorszej czytelności niż zwykły if — warto stosować tam, gdzie wynik płynie dalej w łańcuchu wywołań."
+    },
+    {
+      "id": "kt-12",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dlaczego klasy w Kotlinie są domyślnie final?",
+      "options": [
+        "Ze względów wydajnościowych",
+        "Bo dziedziczenie wymaga świadomego zaprojektowania — 'design for inheritance or prohibit it'",
+        "Bo JVM nie wspiera otwartych klas",
+        "Żeby wymusić użycie interfejsów"
+      ],
+      "correctIndex": 1,
+      "explanation": "To bezpośrednia realizacja zalecenia z Effective Java. Klasa nieprzygotowana na dziedziczenie łatwo łamie LSP, gdy podklasa nadpisze metodę używaną wewnętrznie. Kotlin wymaga jawnego open, co zmusza autora do decyzji. Konsekwencja praktyczna: mockowanie klas wymaga pluginu all-open."
+    },
+    {
+      "id": "and-1",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Co dokładnie oznacza 'process death' i czym różni się od zmiany konfiguracji?",
+      "options": [
+        "To to samo zjawisko pod dwiema nazwami",
+        "System zabija proces w tle; ViewModel nie przeżywa, przeżywa tylko SavedStateHandle/onSaveInstanceState",
+        "Process death następuje tylko po crashu aplikacji",
+        "Po process death aplikacja startuje od ekranu głównego"
+      ],
+      "correctIndex": 1,
+      "explanation": "Zmiana konfiguracji (obrót) niszczy Activity, ale proces żyje — ViewModel przetrwa. Process death to zabicie całego procesu przy braku pamięci; użytkownik wraca na ten sam ekran, ale wszystkie obiekty w pamięci przepadły. Przetrwają tylko dane zapisane w Bundle (SavedStateHandle). To dwa różne scenariusze i trzeba testować oba."
+    },
+    {
+      "id": "and-2",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Kiedy w MVI warto użyć SavedStateHandle?",
+      "options": [
+        "Do przechowywania całego State ekranu",
+        "Do zapisania minimum pozwalającego odtworzyć stan (np. query, id) — resztę pobiera się ponownie",
+        "Nigdy, bo ViewModel wystarcza",
+        "Do przechowywania efektów jednorazowych"
+      ],
+      "correctIndex": 1,
+      "explanation": "Bundle ma ograniczony rozmiar (TransactionTooLargeException) i nie nadaje się na listę użytkowników czy cache. Zapisuj identyfikatory i dane wejściowe: zapytanie, wybraną kategorię, pozycję na liście. Po przywróceniu procesu odtwarzasz resztę przez zwykłe załadowanie danych."
+    },
+    {
+      "id": "and-3",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Dlaczego collect Flow w Composable bez uwzględnienia cyklu życia jest problemem?",
+      "options": [
+        "Powoduje wyciek pamięci",
+        "Kolekcja trwa gdy ekran jest w tle — marnuje zasoby i może odświeżać niewidoczne UI",
+        "Compose nie obsługuje Flow",
+        "Flow przestaje emitować w tle"
+      ],
+      "correctIndex": 1,
+      "explanation": "LaunchedEffect żyje tak długo jak kompozycja, a ta trwa mimo przejścia aplikacji w tło. Dla strumieni kosztownych (lokalizacja, sensory, socket) używa się collectAsStateWithLifecycle albo repeatOnLifecycle(STARTED), które wstrzymują kolekcję poza widocznym stanem."
+    },
+    {
+      "id": "and-4",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Do czego służy WorkManager i kiedy NIE jest właściwym wyborem?",
+      "options": [
+        "Do zadań natychmiastowych związanych z UI — wtedy lepszy jest viewModelScope",
+        "Do wszystkiego, co asynchroniczne",
+        "Wyłącznie do zadań okresowych",
+        "Do zastąpienia korutyn"
+      ],
+      "correctIndex": 1,
+      "explanation": "WorkManager służy pracy odroczonej, która musi przetrwać zamknięcie aplikacji i restart urządzenia (synchronizacja, upload). Ma narzut: zapis do bazy, ograniczenia systemowe, opóźnienia. Do pobrania danych na ekran służy viewModelScope — użycie WorkManagera dałoby widoczne opóźnienie."
+    },
+    {
+      "id": "and-5",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Czym jest StrictMode i co typowo wykrywa?",
+      "options": [
+        "Trybem kompilacji z dodatkowymi ostrzeżeniami",
+        "Narzędziem runtime wykrywającym operacje dyskowe/sieciowe na głównym wątku i wycieki zasobów",
+        "Trybem debugowania układu ekranu",
+        "Weryfikatorem uprawnień"
+      ],
+      "correctIndex": 1,
+      "explanation": "StrictMode instrumentuje wywołania i zgłasza naruszenia: I/O na wątku UI, niezamknięte kursory i strumienie, wykryte instancje Activity po zniszczeniu. Włącza się go w Application dla buildów debug. Wykrywa problemy, które na szybkim urządzeniu deweloperskim są niezauważalne, a na słabszym powodują ANR."
+    },
+    {
+      "id": "and-6",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Aplikacja pokazuje ANR. Jaki jest próg czasowy dla braku odpowiedzi na input?",
+      "options": [
+        "500 ms",
+        "około 5 sekund dla zdarzeń wejściowych",
+        "10 sekund zawsze",
+        "1 minuta"
+      ],
+      "correctIndex": 1,
+      "explanation": "Około 5 s dla zdarzeń wejściowych, ~10 s dla BroadcastReceivera (20 s w tle) i ~20 s dla usług. ANR nie oznacza zawieszenia na dokładnie tyle czasu — wystarczy, że wątek główny jest zajęty, gdy przyjdzie zdarzenie. Częste przyczyny: I/O na Main, długie transakcje bazodanowe, deadlock i nadmierne GC."
+    },
+    {
+      "id": "and-7",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Czym różni się launchMode singleTop od singleTask?",
+      "options": [
+        "singleTop tworzy nowe zadanie, singleTask nie",
+        "singleTop reużywa instancję tylko gdy jest na szczycie stosu; singleTask reużywa ją w całym zadaniu, czyszcząc to co nad nią",
+        "Oba są identyczne",
+        "singleTask nie pozwala na wiele instancji w systemie"
+      ],
+      "correctIndex": 1,
+      "explanation": "singleTop wywoła onNewIntent, jeśli aktywność jest już na wierzchu — chroni przed duplikatami przy powtórnym kliknięciu powiadomienia. singleTask dodatkowo usuwa aktywności leżące nad nią. Nadużywanie singleTask potrafi zaskakująco zmieniać zachowanie przycisku Wstecz."
+    },
+    {
+      "id": "and-8",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Dlaczego przekazywanie Contextu Activity do singletonu jest niebezpieczne?",
+      "options": [
+        "Bo Context nie jest serializowalny",
+        "Bo singleton przeżywa Activity i trzyma referencję do zniszczonego ekranu — wyciek pamięci",
+        "Bo Context nie jest thread-safe",
+        "Bo narusza zasadę Dependency Inversion"
+      ],
+      "correctIndex": 1,
+      "explanation": "Activity Context trzyma całe drzewo widoków i zasoby. Referencja z obiektu o dłuższym czasie życia uniemożliwia zwolnienie pamięci — po kilku obrotach ekranu w pamięci zostaje kilka Activity. Do długo żyjących obiektów przekazuj applicationContext; do widoków tylko Activity Context."
+    },
+    {
+      "id": "perf-1",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Lista w Compose przewija się z zacięciami. Od czego zacząć diagnozę?",
+      "options": [
+        "Od zmniejszenia liczby elementów",
+        "Od pomiaru: Layout Inspector / recomposition counts, żeby znaleźć nadmiarowe rekompozycje",
+        "Od dodania remember do wszystkich wartości",
+        "Od przejścia na RecyclerView"
+      ],
+      "correctIndex": 1,
+      "explanation": "Optymalizacja bez pomiaru to zgadywanie. Narzędzia Android Studio pokazują liczbę rekompozycji per komponent — zwykle winowajcą jest niestabilny typ parametru, brak key w LazyColumn albo odczyt często zmieniającego się stanu zbyt wysoko w drzewie. Dopiero po diagnozie ma sens zmiana kodu."
+    },
+    {
+      "id": "perf-2",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Co oznacza, że typ jest 'niestabilny' dla Compose i jak to naprawić?",
+      "options": [
+        "Że może rzucić wyjątek — trzeba dodać try/catch",
+        "Że Compose nie może założyć niezmienności, więc rekomponuje zawsze; pomaga @Immutable lub kolekcje immutable",
+        "Że typ nie jest thread-safe",
+        "Że wymaga remember"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose pomija rekompozycję tylko dla parametrów stabilnych i równych poprzednim. Klasa z var, interfejs (List) albo typ z innego modułu bez metryk stabilności są niestabilne. Naprawy: adnotacja @Immutable/@Stable, kotlinx.collections.immutable, albo włączenie strong skipping mode."
+    },
+    {
+      "id": "perf-3",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Aplikacja startuje wolno. Który wskaźnik jest kluczowy i co go najczęściej psuje?",
+      "options": [
+        "Rozmiar APK",
+        "Time To Initial Display; psuje go ciężka inicjalizacja w Application.onCreate",
+        "Liczba metod w dex",
+        "Liczba uprawnień"
+      ],
+      "correctIndex": 1,
+      "explanation": "Application.onCreate blokuje pierwszy render. Inicjalizacja bibliotek analitycznych, bazy i wczytywanie konfiguracji powinny być leniwe albo przeniesione do App Startup / tła. Pomocne są też Baseline Profiles, które eliminują koszt interpretacji kodu przy pierwszych uruchomieniach."
+    },
+    {
+      "id": "perf-4",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Co robi Baseline Profile i jaki daje efekt?",
+      "options": [
+        "Kompresuje zasoby aplikacji",
+        "Wskazuje ART, które ścieżki kodu skompilować AOT przed pierwszym uruchomieniem",
+        "Profiluje zużycie pamięci w runtime",
+        "Wymusza tryb R8 full mode"
+      ],
+      "correctIndex": 1,
+      "explanation": "Bez profilu kod jest początkowo interpretowany, a kompilacja JIT następuje dopiero po wielokrotnym wykonaniu — stąd zacięcia przy pierwszym uruchomieniu i pierwszym wejściu na ekran. Baseline Profile dostarcza listę krytycznych metod do kompilacji AOT. Typowy zysk to 20-30% szybszy start."
+    },
+    {
+      "id": "perf-5",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Wykryto wyciek pamięci: Activity nie jest zwalniana po obrocie. Najczęstsza przyczyna?",
+      "options": [
+        "Zbyt duże bitmapy",
+        "Referencja z obiektu dłużej żyjącego: statyczne pole, singleton, niewyrejestrowany listener lub nieanulowana korutyna",
+        "Brak wywołania System.gc()",
+        "Zbyt wiele fragmentów"
+      ],
+      "correctIndex": 1,
+      "explanation": "GC nie zwolni obiektu osiągalnego z korzenia. Typowe źródła: listener zarejestrowany w onCreate bez wyrejestrowania, Handler z odwołaniem do Activity, klasa wewnętrzna niestatyczna, subskrypcja Rx bez dispose. Structured concurrency i viewModelScope eliminują znaczną część tych przypadków."
+    },
+    {
+      "id": "perf-6",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Kiedy w Compose warto przekazywać lambdę zamiast wartości (deferred read)?",
+      "options": [
+        "Zawsze — lambdy są szybsze",
+        "Gdy wartość zmienia się często: odczyt wewnątrz komponentu zawęża zakres rekompozycji",
+        "Tylko przy obsłudze kliknięć",
+        "Gdy wartość jest nullable"
+      ],
+      "correctIndex": 1,
+      "explanation": "Modifier.offset { IntOffset(scroll, 0) } czyta scroll w fazie layoutu, więc zmiana nie wymusza rekompozycji — wystarczy ponowny layout. Przekazanie samej wartości spowodowałoby rekompozycję całego komponentu przy każdej klatce przewijania. To jedna z najskuteczniejszych optymalizacji animacji w Compose."
+    },
+    {
+      "id": "perf-7",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Reducer MVI wykonuje sortowanie listy 10 000 elementów przy każdej intencji. Jak to naprawić bez łamania wzorca?",
+      "options": [
+        "Przenieść sortowanie do Composable",
+        "Sortować raz w use case przy ładowaniu albo cache'ować wynik w stanie zamiast liczyć przy każdej redukcji",
+        "Użyć mutable list i sortować w miejscu",
+        "Zrezygnować z MVI dla tego ekranu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Reducer musi być szybki, bo działa na wątku przetwarzającym intencje. Sortowanie należy do reguł biznesowych, więc naturalnym miejscem jest use case (jak SearchUsersUseCase w tym projekcie). Alternatywnie policz raz i trzymaj wynik w stanie. Właściwość obliczana get() jest wygodna, ale wykonuje się przy każdym odczycie."
+    },
+    {
+      "id": "perf-8",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Które podejście najlepiej ogranicza liczbę zapytań przy wyszukiwaniu z podpowiedziami?",
+      "options": [
+        "Zwiększenie timeoutu zapytań",
+        "debounce + distinctUntilChanged + collectLatest",
+        "Cache wszystkich możliwych wyników",
+        "Wyszukiwanie dopiero po naciśnięciu Enter"
+      ],
+      "correctIndex": 1,
+      "explanation": "debounce czeka na ciszę (jedno zapytanie zamiast jednego na literę), distinctUntilChanged pomija powtórki po skasowaniu i wpisaniu tego samego znaku, a collectLatest anuluje zapytanie nieaktualne. Ta trójka jest w UsersViewModel — testy potwierdzają, że szybkie wpisanie trzech liter daje dokładnie jedno zapytanie."
+    },
+    {
+      "id": "perf-9",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Co mierzy metryka 'jank' i jaki jest budżet czasowy na klatkę przy 60 Hz?",
+      "options": [
+        "Zużycie pamięci; budżet 100 MB",
+        "Klatki wyrenderowane po terminie; budżet to ~16,7 ms na klatkę",
+        "Liczbę rekompozycji; budżet to 60 na sekundę",
+        "Czas odpowiedzi serwera; budżet 200 ms"
+      ],
+      "correctIndex": 1,
+      "explanation": "Przy 60 Hz cały cykl (kompozycja, layout, rysowanie) musi zmieścić się w 16,7 ms; przy 120 Hz w 8,3 ms. Przekroczenie oznacza pominiętą klatkę, którą użytkownik widzi jako zacięcie. Do pomiaru służą JankStats, Macrobenchmark i Perfetto — nie subiektywne wrażenie płynności."
+    },
+    {
+      "id": "perf-10",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Kiedy warto użyć remember z kluczem zamiast zwykłego remember?",
+      "options": [
+        "Zawsze — klucz przyspiesza wyszukiwanie",
+        "Gdy wartość zależy od parametru: zmiana klucza wymusza ponowne obliczenie",
+        "Tylko w LazyColumn",
+        "Gdy wartość jest kosztowna do policzenia"
+      ],
+      "correctIndex": 1,
+      "explanation": "remember(userId) { computeFor(userId) } przelicza wartość po zmianie userId. Zwykłe remember { } zapamiętałoby wynik dla pierwszego użytkownika i zwracało go po zmianie parametru — to bardzo częsty i trudny do zauważenia błąd, bo objawia się dopiero przy nawigacji między elementami."
+    },
+    {
+      "id": "mvi-15",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Ekran ma dwa niezależne obszary, każdy z własnym ładowaniem. Jak zamodelować stan?",
+      "options": [
+        "Jedna flaga isLoading dla całego ekranu",
+        "Osobne pola stanu per obszar albo zbiór identyfikatorów trwających operacji",
+        "Osobny ViewModel dla każdego obszaru",
+        "Lista bool w kolejności obszarów"
+      ],
+      "correctIndex": 1,
+      "explanation": "Pojedyncza flaga załamuje się przy drugiej równoległej operacji: pierwsza kończy się i gasi loader drugiej. W tym projekcie ekran Sync używa Set<String> running, a Users — savingFavorites. Zbiór identyfikatorów skaluje się na dowolną liczbę operacji bez zmiany modelu."
+    },
+    {
+      "id": "mvi-16",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Po powrocie z ekranu detali lista powinna pokazać zaktualizowane dane. Jak to rozwiązać w MVI?",
+      "options": [
+        "Przekazać wynik przez argument nawigacji",
+        "Trzymać wspólne źródło prawdy albo wysłać intencję odświeżenia przy powrocie",
+        "Odświeżać listę w LaunchedEffect przy każdej rekompozycji",
+        "Użyć zmiennej globalnej"
+      ],
+      "correctIndex": 1,
+      "explanation": "Przekazywanie wyników przez nawigację szybko się komplikuje. Albo oba ekrany czytają ten sam store (jak w tym projekcie), albo lista dostaje intencję Refresh przy powrocie. Odświeżanie przy każdej rekompozycji to błąd — rekompozycja zachodzi z wielu powodów i wywoła lawinę zapytań."
+    },
+    {
+      "id": "mvi-17",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Jak przetestować, że intencja NIE wywołała efektu ubocznego?",
+      "options": [
+        "Sprawdzić logi",
+        "Użyć fake'a zliczającego wywołania i zweryfikować, że licznik się nie zmienił",
+        "To nietestowalne",
+        "Sprawdzić, czy stan się nie zmienił"
+      ],
+      "correctIndex": 1,
+      "explanation": "Sam brak zmiany stanu nie dowodzi braku I/O — operacja mogła się wykonać i nie wpłynąć na stan. Fake z licznikiem daje jednoznaczną asercję. Tak testowany jest w tym projekcie brak zapytania przy powtórnym kliknięciu gwiazdki oraz liczba zapytań przy debounce."
+    },
+    {
+      "id": "co-19",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Co się stanie, gdy w bloku finally korutyny wywołasz funkcję suspend po anulowaniu?",
+      "options": [
+        "Wykona się normalnie",
+        "Rzuci CancellationException — trzeba użyć withContext(NonCancellable)",
+        "Zostanie pominięta",
+        "Zablokuje wątek"
+      ],
+      "correctIndex": 1,
+      "explanation": "Po anulowaniu korutyna jest w stanie 'cancelling' i każda funkcja suspend natychmiast rzuca wyjątek. Jeśli w finally musisz posprzątać asynchronicznie (zamknąć zasób, zapisać stan), opakuj to w withContext(NonCancellable). Nadużywanie tego mechanizmu prowadzi jednak do kodu, którego nie da się zatrzymać."
+    },
+    {
+      "id": "co-20",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Czym różni się Flow.stateIn od shareIn?",
+      "options": [
+        "stateIn działa tylko z korutynami",
+        "stateIn zwraca StateFlow (wymaga wartości początkowej, deduplikuje), shareIn SharedFlow z konfigurowalnym replay",
+        "shareIn jest przestarzały",
+        "Nie ma różnicy"
+      ],
+      "correctIndex": 1,
+      "explanation": "Oba zamieniają zimny Flow w gorący, dzieląc jedną subskrypcję między odbiorców. stateIn nadaje się na stan (zawsze ma wartość, pomija duplikaty), shareIn na zdarzenia. Kluczowy parametr to SharingStarted — WhileSubscribed(5000) utrzymuje subskrypcję przez 5 s po odejściu ostatniego odbiorcy, przeżywając obrót ekranu."
+    },
+    {
+      "id": "co-21",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Do czego służy SharingStarted.WhileSubscribed(5000) i skąd ta wartość?",
+      "options": [
+        "To timeout zapytania sieciowego",
+        "Utrzymuje strumień przez 5 s po odejściu ostatniego subskrybenta — przeżywa obrót ekranu bez restartu",
+        "To interwał odświeżania danych",
+        "To maksymalny czas życia StateFlow"
+      ],
+      "correctIndex": 1,
+      "explanation": "Przy obrocie ekranu subskrybent znika i pojawia się ponownie po chwili. Bez opóźnienia strumień zostałby zamknięty i uruchomiony od nowa, powodując ponowne zapytanie. 5 s to konwencja z dokumentacji Androida — wystarczająco długo na zmianę konfiguracji, wystarczająco krótko, by nie marnować zasobów w tle."
+    },
+    {
+      "id": "clean-9",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Use case potrzebuje danych z dwóch repozytoriów i musi je połączyć. Czy to prawidłowe?",
+      "options": [
+        "Nie — use case powinien używać dokładnie jednego repozytorium",
+        "Tak — łączenie danych z wielu źródeł to typowa reguła biznesowa",
+        "Nie — łączenie należy do ViewModelu",
+        "Tak, ale tylko przez osobny agregator"
+      ],
+      "correctIndex": 1,
+      "explanation": "To wręcz jedno z najlepszych uzasadnień istnienia use case'a: enkapsuluje wiedzę o tym, że dana operacja wymaga kilku źródeł. Przeniesienie tego do ViewModelu związałoby regułę biznesową z warstwą prezentacji i uniemożliwiłoby jej ponowne użycie."
+    },
+    {
+      "id": "clean-10",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Aplikacja ma cechę dostępną offline. Gdzie umieścić decyzję 'cache czy sieć'?",
+      "options": [
+        "W ViewModelu — on wie o stanie połączenia",
+        "W repozytorium — to ono zna swoje źródła danych i strategię",
+        "W use case",
+        "W warstwie UI"
+      ],
+      "correctIndex": 1,
+      "explanation": "Repozytorium jest fasadą nad źródłami danych: pamięcią, bazą i siecią. Warstwy wyższe pytają o dane, nie o to, skąd pochodzą. Gdyby ViewModel decydował o źródle, zmiana strategii cache wymagałaby zmian w prezentacji, a offline trzeba by implementować osobno na każdym ekranie."
+    },
+    {
+      "id": "solid-8",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Dodajesz nową metodę do interfejsu używanego przez 10 implementacji. Co to sygnalizuje?",
+      "options": [
+        "Prawidłowy rozwój API",
+        "Możliwe naruszenie ISP — być może metoda należy do węższego interfejsu implementowanego przez część klas",
+        "Konieczność użycia klasy abstrakcyjnej",
+        "Naruszenie LSP"
+      ],
+      "correctIndex": 1,
+      "explanation": "Jeśli tylko część implementacji ma sensowną realizację nowej metody, reszta dostanie pustą implementację albo wyjątek — a to prosta droga do złamania LSP. Sygnał, że interfejs obejmuje więcej niż jedną rolę. Rozwiązanie: osobny, wąski interfejs implementowany przez zainteresowane klasy."
+    },
+    {
+      "id": "solid-9",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Klasa ma metodę o 5 parametrach typu Boolean. Co jest tu głównym problemem?",
+      "options": [
+        "Zbyt duża liczba parametrów wpływa na wydajność",
+        "Flagi zwykle oznaczają kilka trybów działania w jednej metodzie — naruszenie SRP i nieczytelne wywołania",
+        "Boolean nie powinien być parametrem",
+        "Brak wartości domyślnych"
+      ],
+      "correctIndex": 1,
+      "explanation": "Wywołanie process(true, false, true, true, false) jest nieczytelne, a każda flaga to zwykle osobna ścieżka wykonania. Zwykle da się to rozbić na kilka jawnie nazwanych metod albo zastąpić obiektem konfiguracji lub enumem. Nazwane argumenty w Kotlinie łagodzą czytelność, ale nie usuwają nadmiaru odpowiedzialności."
+    },
+    {
+      "id": "cmp-10",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Czym jest CompositionLocal i kiedy jego użycie jest uzasadnione?",
+      "options": [
+        "Mechanizmem cache dla komponentów",
+        "Niejawnym przekazywaniem wartości w dół drzewa — do rzeczy przekrojowych jak motyw czy lokalizacja",
+        "Sposobem na zarządzanie stanem ekranu",
+        "Odpowiednikiem Contextu Androida"
+      ],
+      "correctIndex": 1,
+      "explanation": "CompositionLocal pasuje do wartości używanych wszędzie i rzadko zmienianych: motyw, typografia, gęstość ekranu. Nie należy nim przekazywać stanu ekranu ani zależności biznesowych — ukrywa je przed sygnaturą komponentu, utrudnia testy i podglądy oraz łamie jawność przepływu danych."
+    },
+    {
+      "id": "cmp-11",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Komponent przyjmuje lambdę onClick, która przy każdej rekompozycji jest nową instancją. Skutek?",
+      "options": [
+        "Wyciek pamięci",
+        "Parametr zmienia się za każdym razem, więc Compose nie może pominąć rekompozycji poddrzewa",
+        "Kliknięcia przestaną działać",
+        "Brak — lambdy są zawsze stabilne"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose pomija rekompozycję tylko gdy wszystkie parametry są równe. Nowa instancja lambdy przy każdym przebiegu psuje to porównanie. Kompilator potrafi zapamiętać lambdy bez przechwyceń albo przechwytujące stabilne wartości; problem pojawia się przy przechwytywaniu niestabilnych typów. Ratunkiem jest remember lub referencja do metody."
+    },
+    {
+      "id": "test-13",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Test przechodzi uruchomiony sam, ale zawodzi w pakiecie. Najczęstsza przyczyna?",
+      "options": [
+        "Zbyt krótki timeout",
+        "Współdzielony stan między testami — statyczne pola, singleton, niezresetowany Dispatchers.Main",
+        "Błąd w narzędziu testowym",
+        "Zbyt wolne CI"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kolejność testów jest zmienna, więc pozostałość po jednym psuje inny. Typowi winowajcy: stopKoin bez wywołania, brak Dispatchers.resetMain, statyczny cache, baza in-memory bez czyszczenia. Testy muszą być niezależne — dlatego w tym projekcie testy Koina jawnie wołają stopKoin()."
+    },
+    {
+      "id": "test-14",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Po co w teście fake repozytorium zamiast biblioteki mockującej?",
+      "options": [
+        "Mocki są zawsze złe",
+        "Fake jest szybszy, nie łamie się przy refaktorze sygnatur i czyta się jak zwykły kod",
+        "Mocki nie działają w KMP",
+        "Fake nie wymaga interfejsu"
+      ],
+      "correctIndex": 1,
+      "explanation": "Testy z mockami weryfikują wywołania, więc pękają przy każdej zmianie kolejności czy sygnatury, mimo poprawnego zachowania. Fake sprawdza wynik, nie sposób jego osiągnięcia. Praktyczny argument w KMP: większość bibliotek mockujących opiera się na refleksji JVM i nie działa w commonTest — a fake działa wszędzie."
+    },
+    {
+      "id": "test-15",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Co powinien weryfikować test golden po zmianie designu?",
+      "options": [
+        "Nic — należy od razu zatwierdzić nowe wzorce",
+        "Człowiek przegląda różnicę i świadomie decyduje, czy to zamierzona zmiana",
+        "Automatyczne porównanie z Figmą",
+        "Tylko czy test się kompiluje"
+      ],
+      "correctIndex": 1,
+      "explanation": "Golden test przenosi odpowiedzialność na przegląd różnicy — to jego jedyny mechanizm działania. Automatyczne zatwierdzanie zamienia go w atrapę dającą fałszywe poczucie bezpieczeństwa. Dlatego pliki referencyjne trafiają do repozytorium i przechodzą przez code review jak każda inna zmiana."
+    },
+    {
+      "id": "kmp-10",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Chcesz użyć w commonMain biblioteki dostępnej tylko na JVM. Jakie masz opcje?",
+      "options": [
+        "Dodać ją do commonMain — Gradle sobie poradzi",
+        "Zdefiniować interfejs w commonMain i dostarczyć implementacje per platforma (expect/actual lub DI)",
+        "Skopiować kod biblioteki do projektu",
+        "Zrezygnować z iOS"
+      ],
+      "correctIndex": 1,
+      "explanation": "commonMain kompiluje się dla wszystkich targetów, więc zależność JVM-only uniemożliwi build Kotlin/Native. Standardowe rozwiązanie: abstrakcja w commonMain, implementacja JVM w androidMain, natywna w iosMain. Warto najpierw sprawdzić, czy nie istnieje multiplatformowy odpowiednik (ktor, okio, kotlinx-*)."
+    },
+    {
+      "id": "kmp-11",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Dlaczego w KMP warto ograniczać publiczne API modułu shared eksponowane do iOS?",
+      "options": [
+        "Bo zmniejsza rozmiar frameworka i upraszcza interop — mniej typów przechodzi przez Objective-C",
+        "Bo Swift nie obsługuje więcej niż 100 klas",
+        "Bo publiczne API jest wolniejsze",
+        "Bo iOS wymaga jawnej listy eksportów"
+      ],
+      "correctIndex": 0,
+      "explanation": "Każdy publiczny typ trafia do nagłówka Objective-C, powiększając framework i czas kompilacji. Dodatkowo im węższe API, tym mniej Kotlinowych osobliwości (sealed, generyki, wartości domyślne) wycieka do Swifta w niewygodnej postaci. Warto eksponować fasadę, a resztę oznaczać jako internal."
+    },
+    {
+      "id": "rx-11",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Kod Rx wykonuje się na złym wątku mimo subscribeOn(Schedulers.io()). Możliwa przyczyna?",
+      "options": [
+        "subscribeOn działa tylko z Flowable",
+        "W łańcuchu jest więcej niż jedno subscribeOn — liczy się pierwsze",
+        "Brakuje observeOn",
+        "Schedulers.io() nie istnieje"
+      ],
+      "correctIndex": 1,
+      "explanation": "subscribeOn wpływa na moment subskrypcji źródła, więc kolejne wywołania w łańcuchu są ignorowane. To częsty błąd przy składaniu strumieni z kilku warstw, gdzie każda dodaje własne subscribeOn. observeOn działa inaczej — obowiązuje od miejsca wystąpienia w dół i może być użyte wielokrotnie."
+    },
+    {
+      "id": "rx-12",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Czym jest 'backpressure' i dlaczego Flow nie potrzebuje osobnego typu jak Flowable?",
+      "options": [
+        "To limit liczby subskrybentów",
+        "To sytuacja, gdy producent emituje szybciej niż konsument przetwarza; Flow rozwiązuje to zawieszaniem emitera",
+        "To mechanizm ponawiania błędów",
+        "To ograniczenie rozmiaru bufora w Channel"
+      ],
+      "correctIndex": 1,
+      "explanation": "W Rx konsument musi jawnie żądać n elementów, a Observable bez tego mechanizmu grozi OutOfMemoryError. Flow wykorzystuje zawieszanie: emit() po prostu czeka, aż konsument będzie gotowy. Backpressure jest więc wbudowane w model, a operatory buffer/conflate służą do jego świadomego rozluźnienia."
+    },
+    {
+      "id": "kmp-12",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Potrzebujesz abstrakcji platformowej w commonMain. Jakie pytanie rozstrzyga wybór między expect/actual a interfejsem plus DI?",
+      "options": [
+        "Które rozwiązanie kompiluje się szybciej",
+        "Czy jest tu cokolwiek, co warto podmienić w teście",
+        "Czy kod należy do warstwy domenowej czy danych",
+        "Czy iOS w ogóle wspiera to API"
+      ],
+      "correctIndex": 1,
+      "explanation": "`actual` nie da się podmienić: na target przypada dokładnie jeden, wybrany przez kompilator. Jeśli test kiedykolwiek chciałby kontrolować zachowanie — zwrócić wartość, zasymulować błąd — abstrakcja musi być interfejsem. Czas kompilacji i warstwa są drugorzędne; decyduje możliwość podmiany."
+    },
+    {
+      "id": "kmp-13",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Jaka jest praktyczna konsekwencja zrobienia trwałego magazynu przez expect/actual zamiast interfejsu?",
+      "options": [
+        "Przestaje działać w Kotlin/Native",
+        "Każdy test dotykający tej ścieżki wciąga prawdziwą implementację platformową, więc nie uruchomi się na JVM",
+        "Kod zwalnia z powodu dynamicznego wiązania",
+        "Żadna — oba podejścia są równoważne"
+      ],
+      "correctIndex": 1,
+      "explanation": "`actual` rozwiązuje kompilator, więc nie ma szwu do podmiany. Test na JVM wymagałby prawdziwego SharedPreferences, czyli emulatora albo Robolectrica. Z interfejsem ten sam test działa w milisekundach na fake'u w pamięci — i dokładnie dlatego KeyValueStore jest w tym projekcie portem."
+    },
+    {
+      "id": "kmp-14",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Który z tych przypadków najlepiej nadaje się na expect/actual zamiast portu?",
+      "options": [
+        "Odczyt zapisanej sesji użytkownika",
+        "Ustawienie odcienia ikon paska statusu",
+        "Sprawdzenie, czy urządzenie jest online",
+        "Wygenerowanie unikalnego identyfikatora"
+      ],
+      "correctIndex": 1,
+      "explanation": "Ustawienie odcienia ikon to jednokierunkowy efekt uboczny: bez stanu, bez rozgałęzień, bez wartości zwracanej, a na iOS to no-op. Fake mógłby jedynie sprawdzić, że wywołanie nastąpiło, czyli testowałby mocka. Pozostałe trzy trzymają stan albo podejmują decyzję, którą test musi kontrolować, więc należą za interfejs."
+    },
+    {
+      "id": "kmp-15",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Dlaczego to złe użycie expect/actual?",
+      "options": [
+        "Funkcje expect nie mogą zwracać Long",
+        "Czas staje się niekontrolowalny w testach — wygaśnięcie dałoby się sprawdzić tylko czekając",
+        "To się nie skompiluje dla Kotlin/Native",
+        "currentTimeMillis jest już w bibliotece standardowej"
+      ],
+      "correctIndex": 1,
+      "explanation": "Problemem jest testowalność, nie składnia. Gdy zegar jest schowany za `actual`, test nie może udać, że czas minął, więc jedynym sposobem na dotarcie do gałęzi wygaśnięcia jest odczekanie. `fun interface Clock` wstrzyknięty do walidatora czyni tę samą logikę testowalną w mikrosekundach. Wszystko, co jest decyzją, a nie surowym wywołaniem platformy, należy za interfejs.",
+      "code": "expect fun currentTimeMillis(): Long\n\nfun isTokenExpired(expiry: Long) = currentTimeMillis() > expiry"
+    },
+    {
+      "id": "kmp-16",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Jak wypada zależność platformowa przekazana jako parametr na tle expect/actual i DI?",
+      "options": [
+        "Gorzej niż DI, bo ujawnia szczegół implementacyjny",
+        "Zostawia zależność widoczną w sygnaturze, pozwala podglądom użyć wartości domyślnej i trzyma Context poza wspólnym kodem",
+        "Działa tylko dla funkcji Compose",
+        "Uniemożliwia użycie Koina"
+      ],
+      "correctIndex": 1,
+      "explanation": "`App(platformModule: Module = previewPlatformModule())` deklaruje zależność w sygnaturze zamiast chować ją w globalnym obiekcie. Android przekazuje SharedPreferences, iOS NSUserDefaults, a podglądy dostają domyślną implementację w pamięci bez żadnej konfiguracji. Widoczność w sygnaturze to zaleta: czytelnik widzi, czego funkcja potrzebuje."
+    },
+    {
+      "id": "kmp-17",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Tutorial każe wywołać freeze() przed współdzieleniem stanu między wątkami w Kotlin/Native. Jak dziś czytać tę poradę?",
+      "options": [
+        "Słusznie — zamrażanie nadal jest wymagane dla współdzielonego stanu",
+        "Nieaktualna — nowy model pamięci usunął zamrażanie w Kotlinie 1.7.20",
+        "Słusznie, ale tylko dla obiektów przechwyconych przez korutyny",
+        "Słusznie tylko na iOS, nie na macOS"
+      ],
+      "correctIndex": 1,
+      "explanation": "Stary model wymagał freeze() i rzucał InvalidMutabilityException przy mutacji zamrożonego obiektu, co czyniło korutyny udręką i odstręczało zespoły od KMP. Od 1.7.20 stan współdzieli się między wątkami jak na JVM. Porady o freeze(), @ThreadLocal i AtomicReference pochodzą sprzed tej zmiany — zawsze sprawdzaj datę materiałów o KMP."
+    },
+    {
+      "id": "kmp-18",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Zespół współdzieli warstwy domeny i danych, ale zostaje przy SwiftUI na iOS. Jak to ocenić?",
+      "options": [
+        "Półśrodek — sensem KMP jest współdzielenie również UI",
+        "Pełnoprawna architektura, która zbiera większość korzyści, bo ryzykowna złożoność siedzi w logice",
+        "Niemożliwe — KMP wymaga Compose Multiplatform",
+        "Rozsądne tylko dla małych aplikacji"
+      ],
+      "correctIndex": 1,
+      "explanation": "Zysk ze współdzielenia maleje w miarę wychodzenia na zewnątrz: domena i dane zawierają złożoność, którą warto napisać raz, a UI jest tam, gdzie konwencje platformy znaczą najwięcej. Natywne UI to częsty i świadomy wybór. Nakłada jedno ograniczenie: współdzielone warstwy nie mogą zależeć od Compose — i dlatego domena zostaje czystym Kotlinem."
+    },
+    {
+      "id": "kmp-19",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Eksportujesz kotlinowy sealed interface do iOS. Co faktycznie dostaje programista Swift?",
+      "options": [
+        "Enum Swift z wartościami skojarzonymi i wyczerpującym dopasowaniem",
+        "Protokół z klasami implementującymi, a switch nadal wymaga gałęzi default",
+        "Struct z dyskryminatorem typu",
+        "Nic — typy sealed nie są eksportowane"
+      ],
+      "correctIndex": 1,
+      "explanation": "Interop idzie przez Objective-C, który nie zna typów sealed, więc wyczerpującość ginie i kompilator przestaje pomagać. To realny koszt, gdy współdzielone API modeluje stan jako hierarchię sealed. SKIE generuje na tym natywne enumy Swift, przywracając wyczerpujące dopasowanie — warto po nie sięgnąć zamiast pisać wrappery ręcznie."
+    },
+    {
+      "id": "kmp-20",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Dlaczego warto trzymać wąskie API eksportowane ze wspólnego modułu?",
+      "options": [
+        "Kotlin/Native ogranicza liczbę eksportowanych klas",
+        "Każdy publiczny typ trafia do nagłówka Objective-C, powiększając framework i czas kompilacji oraz przepuszczając kotlinowe osobliwości do Swifta",
+        "Deklaracje publiczne wywołuje się wolniej",
+        "iOS wymaga jawnej listy eksportów"
+      ],
+      "correctIndex": 1,
+      "explanation": "Generowany nagłówek rośnie z każdą publiczną deklaracją, a każda z nich wystawia konstrukcje Kotlina — typy sealed, generyki, argumenty domyślne — w takiej niewygodnej postaci, na jaką pozwala Objective-C. Wąska fasada z resztą oznaczoną jako internal utrzymuje w ryzach i framework, i wygodę po stronie Swifta."
+    },
+    {
+      "id": "kmp-21",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Które stwierdzenie o KMP jest FAŁSZYWE?",
+      "options": [
+        "Rosną czasy budowania, bo każdy target kompiluje się osobno",
+        "Błąd we wspólnym kodzie trafia teraz do obu aplikacji naraz",
+        "Współdzielenie kodu znosi różnice w uprawnieniach i pracy w tle",
+        "Zależności tylko na JVM nie da się użyć z commonMain"
+      ],
+      "correctIndex": 2,
+      "explanation": "Zachowanie platform nie ujednolica się przez współdzielenie kodu: uprawnienia, limity pracy w tle i cykle życia nadal się różnią i nadal wymagają obsługi platformowej. Pozostałe trzy to prawdziwe kompromisy — a ten o współdzielonym błędzie jest argumentem za większą liczbą testów, nie mniejszą, bo pojedyncza usterka trafia teraz podwójnie."
+    }
+  ]
+}

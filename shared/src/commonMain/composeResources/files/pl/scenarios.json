@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "lost-update",
+      "title": "Utracona aktualizacja (var++)",
+      "description": "{workers} korutyn zwiększa wspólne pole: odczyt → yield() → zapis.",
+      "expectation": "Spodziewamy się {workers}, ale zobaczymy mniej.",
+      "explanation": "Między odczytem a zapisem jest punkt zawieszenia. Inne korutyny zdążą odczytać tę samą wartość, więc ich zapisy się nadpisują. Uwaga: to dzieje się nawet na JEDNYM wątku – współbieżność to nie to samo co równoległość.",
+      "demonstratesBug": true
+    },
+    {
+      "id": "mutex",
+      "title": "Naprawa: Mutex",
+      "description": "Ten sam kod, ale sekcja krytyczna owinięta w `mutex.withLock { }`.",
+      "expectation": "Dokładnie {workers} – każda inkrementacja jest niepodzielna.",
+      "explanation": "Mutex z kotlinx.coroutines zawiesza korutynę zamiast blokować wątek. Dlatego jest tani i bezpieczny – w przeciwieństwie do `synchronized`, który zablokowałby wątek razem z całym dispatcherem.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "stateflow-value",
+      "title": "StateFlow: .value = zamiast update {}",
+      "description": "{workers} korutyn robi `flow.value = flow.value + 1` z yield() w środku.",
+      "expectation": "Spodziewamy się {workers}, ale zobaczymy mniej.",
+      "explanation": "`.value = x` to zwykły zapis, nie operacja atomowa. Wzorzec odczyt-modyfikacja-zapis na StateFlow jest tak samo podatny na wyścig jak zwykłe pole.",
+      "demonstratesBug": true
+    },
+    {
+      "id": "stateflow-update",
+      "title": "Naprawa: StateFlow.update {}",
+      "description": "Ten sam kod przez `flow.update { it + 1 }`.",
+      "expectation": "Dokładnie {workers} – update działa w pętli compare-and-set.",
+      "explanation": "`update {}` powtarza lambdę, dopóki wartość nie zostanie zapisana bez kolizji. Dlatego lambda musi być czysta i szybka – może wykonać się kilka razy.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "mvi-loop",
+      "title": "Pętla MVI serializuje intencje",
+      "description": "{workers} korutyn woła dispatch() równocześnie; jeden konsument redukuje.",
+      "expectation": "Dokładnie {workers} – żadna intencja nie ginie.",
+      "explanation": "Tak działa MviStore w tym projekcie: dispatch tylko wrzuca intencję do kanału, a jedna pętla ją konsumuje. Redukcja nigdy nie wykonuje się współbieżnie, więc reducer nie potrzebuje żadnych blokad.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "collect-latest",
+      "title": "collectLatest anuluje nieaktualne żądania",
+      "description": "5 żądań wysłanych szybko po sobie; każde „trwa” 50 ms.",
+      "expectation": "Ukończy się tylko żądanie nr 5.",
+      "explanation": "To mechanizm chroniący wyszukiwarkę przed nadpisaniem nowych wyników przez stare. W tym projekcie używa go UsersViewModel.",
+      "demonstratesBug": false
+    },
+    {
+      "id": "channel-vs-sharedflow",
+      "title": "Channel vs SharedFlow dla efektów",
+      "description": "Zdarzenie wysłane ZANIM kolektor zdążył się podpiąć.",
+      "expectation": "Channel dostarczy zdarzenie, MutableSharedFlow je zgubi.",
+      "explanation": "Dlatego efekty jednorazowe (snackbar, nawigacja) trzymamy w kanale, a nie w SharedFlow bez repleya. Inaczej komunikat o błędzie zniknie, gdy ekran akurat się odtwarza.",
+      "demonstratesBug": false
+    }
+  ]
+}

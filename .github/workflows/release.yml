@@ -1,0 +1,157 @@
+name: Release
+
+# Fires on every merge into main. Combined with branch protection, "merged into main" and
+# "passed CI" mean the same thing, so this workflow can build straight away rather than
+# repeating the checks.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Releases are never cancelled mid-flight: a half-published tag is worse than a slow queue.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.resolve.outputs.name }}
+      code: ${{ steps.resolve.outputs.code }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: resolve
+        # versionName comes from gradle.properties, so bumping a release is a reviewed
+        # change in a PR rather than a manual step here. versionCode is the run number:
+        # monotonic, unique, and never reused even when the name stays the same.
+        run: |
+          NAME=$(grep '^app.versionName=' gradle.properties | cut -d= -f2)
+          CODE=${{ github.run_number }}
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NAME+$CODE" >> "$GITHUB_OUTPUT"
+          echo "Releasing $NAME ($CODE)"
+
+  android:
+    name: Android APK
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release APK
+        run: |
+          ./gradlew :androidApp:assembleRelease --no-daemon \
+            -Papp.versionName=${{ needs.version.outputs.name }} \
+            -Papp.versionCode=${{ needs.version.outputs.code }}
+
+      - name: Rename the APK
+        # A versioned filename makes downloaded artifacts self-describing; the default
+        # androidApp-release.apk tells you nothing once it leaves the browser.
+        run: |
+          mkdir -p artifacts
+          cp androidApp/build/outputs/apk/release/*.apk \
+            "artifacts/LearnMobileDev-${{ needs.version.outputs.name }}-${{ needs.version.outputs.code }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts/*.apk
+          retention-days: 90
+          if-no-files-found: error
+
+  ios:
+    name: iOS IPA
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release archive
+        run: |
+          xcodebuild archive \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/app.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            MARKETING_VERSION=${{ needs.version.outputs.name }} \
+            CURRENT_PROJECT_VERSION=${{ needs.version.outputs.code }} \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package the IPA
+        # An unsigned archive cannot go through -exportArchive, so the IPA is assembled by
+        # hand: an IPA is a zip with the .app inside a Payload directory. Installing it
+        # requires re-signing, which is expected for a project with no certificates.
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload" artifacts
+          cp -R "$RUNNER_TEMP/app.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -qr app.ipa Payload)
+          cp "$RUNNER_TEMP/app.ipa" \
+            "artifacts/LearnMobileDev-${{ needs.version.outputs.name }}-${{ needs.version.outputs.code }}-unsigned.ipa"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: artifacts/*.ipa
+          retention-days: 90
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [version, android, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The tag is created here rather than by hand, so a tag can only ever exist for a
+        # commit that actually produced artifacts.
+        run: |
+          gh release create "${{ needs.version.outputs.tag }}" \
+            --title "${{ needs.version.outputs.name }} (${{ needs.version.outputs.code }})" \
+            --notes "Automated release from \`${{ github.sha }}\`.
+
+          The iOS build is **unsigned** and has to be re-signed before it can be installed
+          on a device.
+
+          $(git log -1 --pretty=%B)" \
+            artifacts/*

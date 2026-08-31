@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Warstwa monochromatyczna dla ikon tematycznych (Android 13+).
+
+  System sam koloruje tę grafikę zgodnie z tapetą użytkownika, dlatego kształt musi
+  być jednolity i wypełniony — bez gradientów i bez polegania na kolorach.
+  Ekran telefonu jest tu "wycięty" tą samą techniką co strzałka: rysujemy tylko ramkę.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Ramka telefonu (obrys, żeby ikona nie była pełną plamą) -->
+    <path
+        android:pathData="M40,26h28a6,6 0 0 1 6,6v44a6,6 0 0 1 -6,6h-28a6,6 0 0 1 -6,-6v-44a6,6 0 0 1 6,-6z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:fillColor="#00000000" />
+
+    <!-- Zygzak w górę -->
+    <path
+        android:pathData="M43,63L50,55L55,60L60,51"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+
+    <!-- Grot -->
+    <path
+        android:pathData="M63.4,46.1L53.9,49.4L60.6,55.6z"
+        android:fillColor="#FFFFFFFF" />
+</vector>

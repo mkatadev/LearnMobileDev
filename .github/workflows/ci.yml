@@ -1,0 +1,109 @@
+name: CI
+
+# Runs on every pull request. Branch protection points at these two jobs, so a PR cannot be
+# merged until both are green.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR cancels the previous run; the older result is obsolete anyway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Two jobs, split by platform rather than by activity.
+#
+# Lint, tests and the APK all share one Gradle cache and one checkout, so running them as
+# separate jobs would pay the setup cost three times over for no extra parallelism. The
+# split that does pay off is Android vs iOS: different runners, different toolchains, and
+# the expensive macOS job starts immediately instead of queueing behind Ubuntu.
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          # Matches gradle/gradle-daemon-jvm.properties, so the wrapper does not have to
+          # provision a toolchain on every run.
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Lint
+        run: ./gradlew :androidApp:lintRelease --no-daemon
+
+      - name: Shared tests on the JVM
+        run: ./gradlew :shared:testAndroidHostTest --no-daemon
+
+      # A PR build only has to prove the artifact still compiles in release mode.
+      # Nothing is published, so the version stays at whatever gradle.properties says.
+      - name: Release APK
+        run: ./gradlew :androidApp:assembleRelease --no-daemon
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-android
+          path: |
+            androidApp/build/reports/lint-results-*.html
+            shared/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  ios:
+    name: iOS
+    # macOS is required: neither the iOS test target nor xcodebuild runs anywhere else.
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Shared tests on the iOS simulator
+        # Running the suite on both targets is the point of a KMP project: the logic is
+        # written once and has to be verified on every platform that ships it.
+        run: ./gradlew :shared:iosSimulatorArm64Test --no-daemon
+
+      - name: Release archive
+        # Unsigned: a teaching project has no certificates, and compiling is all a PR needs
+        # to prove.
+        run: |
+          xcodebuild archive \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/app.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-ios
+          path: shared/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore

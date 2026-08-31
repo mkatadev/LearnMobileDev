@@ -1,0 +1,2280 @@
+{
+  "version": 2,
+  "questions": [
+    {
+      "id": "mvi-1",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "In MVI, a reducer receives an intent that requires fetching data from the network. What should it do?",
+      "options": [
+        "Call the repository and return state with the result",
+        "Return unchanged state or a loading flag — the store/ViewModel layer starts the I/O",
+        "Start a coroutine and update state in the callback",
+        "Throw an exception, because reducers do not handle such intents"
+      ],
+      "correctIndex": 1,
+      "explanation": "A reducer must remain a pure function, (State, Intent) -> State. Doing I/O inside it destroys determinism, makes tests require mocks, and breaks time travel because replaying state would repeat the network request. Side effects are started by the store after reduction, and their results return as separate Internal intents."
+    },
+    {
+      "id": "mvi-2",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Why should one-off events (snackbar, navigation) not be fields in State?",
+      "options": [
+        "Because they increase the size of the state object",
+        "Because State is replayable — after recomposition or rotation the event would run again",
+        "Because Compose cannot render events",
+        "Because StateFlow does not support nullable types"
+      ],
+      "correctIndex": 1,
+      "explanation": "State describes what is TRUE at a given moment and is replayed on every recomposition and after configuration changes. An event stored in state would be consumed multiple times. Use a Channel with receiveAsFlow for exactly one receiver, or a SharedFlow with explicit acknowledgement."
+    },
+    {
+      "id": "mvi-3",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A MutableSharedFlow without replay was chosen to store one-off effects. What bug will appear?",
+      "options": [
+        "Effects will be duplicated after screen rotation",
+        "An effect sent before the collector attaches will be lost forever",
+        "Effects will be delivered in random order",
+        "No bug will appear — it is equivalent to Channel"
+      ],
+      "correctIndex": 1,
+      "explanation": "SharedFlow without replay is hot and does not buffer for absent subscribers. If a network error happens while the screen is being recreated, the snackbar will never appear. Channel buffers the event until it is received, so it is the right choice for effects targeted at a single receiver.",
+      "code": "private val _effects = MutableSharedFlow<Effect>()   // drops events\nprivate val _effects = Channel<Effect>(Channel.BUFFERED)  // does not drop them"
+    },
+    {
+      "id": "mvi-4",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Optimistic update: the user taps a star, saving is in progress, then taps again. Where is the best place to protect against the double tap?",
+      "options": [
+        "Set enabled = false on the button in Compose",
+        "Debounce clicks in the ViewModel",
+        "In the reducer — if the id is in savingFavorites, return state unchanged",
+        "With an isLoading flag in the ViewModel outside state"
+      ],
+      "correctIndex": 2,
+      "explanation": "Putting the guard in the reducer is testable without UI and works no matter how many views dispatch intents. enabled=false is only presentation-layer protection and does not stop programmatic dispatch or a race. The store can also detect no state change (before == after) and skip I/O."
+    },
+    {
+      "id": "mvi-5",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "How do Intent.Ui and Intent.Internal differ, and why make that split?",
+      "options": [
+        "Ui intents are synchronous, Internal intents are asynchronous",
+        "Ui expresses a user intention, Internal describes a fact that already happened (an I/O result)",
+        "Internal intents are private and do not go through the reducer",
+        "It is only a naming convention with no technical meaning"
+      ],
+      "correctIndex": 1,
+      "explanation": "Ui intents are requests or wishes, such as QueryChanged; Internal intents are past-tense facts, such as LoadSucceeded. Both go through the same reducer, so EVERY state change has a name and appears on the timeline. Without the split, I/O results would set state directly and create a second hidden mutation path."
+    },
+    {
+      "id": "mvi-6",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "In MviStore, intents go into a Channel consumed by a single loop. What does that guarantee?",
+      "options": [
+        "That intents cannot be lost under load",
+        "Serialized reduction — two parallel dispatches cannot interleave state reads and writes",
+        "That reduction runs on Dispatchers.Main",
+        "Automatic deduplication of duplicate intents"
+      ],
+      "correctIndex": 1,
+      "explanation": "A single consumer ensures reduce() never runs concurrently. The reducer therefore needs no locks, and middleware observes consistent before/after pairs. See the MVI Loop scenario in the Sync tab: 100 parallel dispatches and zero lost intents."
+    },
+    {
+      "id": "mvi-7",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A screen has isLoading, error, and users fields. Where should showEmptyState be placed?",
+      "options": [
+        "As a separate Boolean field in State, set by the reducer",
+        "As a computed property (get()) in the State class",
+        "In the Composable function, just before rendering the list",
+        "In the ViewModel as a separate StateFlow"
+      ],
+      "correctIndex": 1,
+      "explanation": "Derived state computed in State is a single source of truth, testable without UI, and impossible to forget in one of several rendering places. A separate Boolean field would have to be updated in every reducer branch and would eventually drift from the rest of the state."
+    },
+    {
+      "id": "mvi-8",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Time travel debugging is possible in MVI, but not in typical MVVM. Why?",
+      "options": [
+        "Because MVI uses immutable data structures",
+        "Because every state change goes through one named function, so the (intent, state) history fully describes the session",
+        "Because StateFlow stores the history of values",
+        "Because Compose saves recomposition snapshots"
+      ],
+      "correctIndex": 1,
+      "explanation": "The key is not immutability alone, but the existence of exactly ONE place where state transitions happen. In MVVM, scattered methods mutate state, so a complete ordered list of transitions cannot be collected or replayed."
+    },
+    {
+      "id": "mvi-9",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A form has 30 fields. You create 30 separate FieldXChanged intents. What is the problem?",
+      "options": [
+        "Performance — too many intent objects",
+        "Excess boilerplate; one Intent with a form model or field reference is better",
+        "The reducer cannot handle that many when branches",
+        "There is no problem — this is correct MVI usage"
+      ],
+      "correctIndex": 1,
+      "explanation": "MVI is not a dogma. For large forms, 30 intents and 30 when branches are pure cost without benefit. A more reasonable approach is FieldChanged(field: FormField, value: String) or FormUpdated(form: FormModel). The pattern should serve readability, not the other way around."
+    },
+    {
+      "id": "mvi-10",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "The store performs I/O in onIntentProcessed. Why should this method NOT be suspend and block the loop?",
+      "options": [
+        "Because suspend does not work in abstract classes",
+        "Because a long-running task would block processing of subsequent intents and freeze the whole screen",
+        "Because it would violate reducer purity",
+        "Because Channel does not support suspend functions"
+      ],
+      "correctIndex": 1,
+      "explanation": "The intent loop must remain responsive. If it waited for a network request to finish, the user could not even collapse a panel or type the next letter. Side effects should be launched in separate coroutines, and their results should come back as intents."
+    },
+    {
+      "id": "kmp-1",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "What is the expect/actual mechanism used for?",
+      "options": [
+        "Declaring optional dependencies in Gradle",
+        "Declaring an API in common code and providing an implementation per platform",
+        "Marking code that requires opt-in",
+        "Generating Objective-C headers"
+      ],
+      "correctIndex": 1,
+      "explanation": "expect declares a contract in commonMain, while actual provides implementations in androidMain or iosMain. Note that this is not always the best solution: often a plain interface in commonMain plus DI-provided implementations is cleaner because it is easier to test and replace."
+    },
+    {
+      "id": "kmp-2",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Kotlin/Native has used the new memory model since version 1.7.20. What changed?",
+      "options": [
+        "The garbage collector disappeared",
+        "Object freezing and the restriction on sharing state between threads disappeared",
+        "Objects are always copied between threads",
+        "Kotlin/Native switched to reference counting like Swift"
+      ],
+      "correctIndex": 1,
+      "explanation": "The old model required freeze() and threw InvalidMutabilityException when mutating a shared object, which was the biggest KMP barrier. The new model allows state to be shared between threads much like on the JVM, so coroutines and Flow work on Kotlin/Native without workarounds."
+    },
+    {
+      "id": "kmp-3",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "How can you expose Flow from common code to Swift in a convenient way for iOS?",
+      "options": [
+        "Directly — Swift natively understands Flow",
+        "Wrap it in your own callback/AsyncSequence wrapper or use SKIE/KMP-NativeCoroutines",
+        "Convert Flow to LiveData",
+        "Export only suspend functions; Flow cannot be exposed"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin/Native exports suspend functions as functions with completion handlers, but Flow has no direct Swift equivalent. Solutions include a custom wrapper with subscription and a cancellation handle, or tools such as SKIE and KMP-NativeCoroutines that generate native AsyncSequence APIs."
+    },
+    {
+      "id": "kmp-4",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Which application layers are most valuable to share in KMP?",
+      "options": [
+        "Only the UI layer",
+        "Domain and data (models, use cases, repositories), with UI optionally shared through Compose Multiplatform",
+        "Only data models",
+        "All or nothing — KMP does not allow partial sharing"
+      ],
+      "correctIndex": 1,
+      "explanation": "The biggest gain comes from sharing business logic and the data layer, where complexity and costly bugs usually live. UI can be shared with Compose Multiplatform, but that is an independent decision: many teams keep native UI, such as SwiftUI, while sharing only domain logic. KMP allows any degree of sharing."
+    },
+    {
+      "id": "kmp-5",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "How does the commonMain source set differ from androidMain and iosMain?",
+      "options": [
+        "commonMain compiles only for Android",
+        "commonMain contains code for all targets and has no access to platform APIs",
+        "androidMain takes precedence over commonMain in name conflicts",
+        "iosMain is generated automatically from commonMain"
+      ],
+      "correctIndex": 1,
+      "explanation": "commonMain is compiled for every target, so it can use only APIs available everywhere, such as the standard library and kotlinx libraries. Platform code belongs in androidMain or iosMain, which see commonMain and can provide actual implementations. The hierarchy can be extended with intermediate source sets, such as nativeMain or appleMain."
+    },
+    {
+      "id": "kmp-6",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "In commonMain you need to read a file from resources. Which approach is compatible with KMP?",
+      "options": [
+        "java.io.File — it works on both platforms",
+        "Compose Multiplatform Resources (Res.readBytes) or a custom interface with implementations per platform",
+        "An android.content.Context passed into commonMain",
+        "kotlin.io.readLine with redirection"
+      ],
+      "correctIndex": 1,
+      "explanation": "java.io.File and Context are JVM/Android APIs, unavailable in commonMain. Compose Resources provides shared Res.readBytes working on both platforms. Another option is your own port, such as a Source interface with actual implementations, which also improves testability; this project does exactly that with LessonsSource."
+    },
+    {
+      "id": "co-1",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "The following code run by 100 coroutines on ONE thread produces a result smaller than 100. Why?",
+      "options": [
+        "Because Dispatchers.Default uses multiple cores",
+        "Because yield() creates a suspension point between the read and the write, where other coroutines can enter",
+        "Because the var is not marked @Volatile",
+        "Because async does not guarantee all tasks will run"
+      ],
+      "correctIndex": 1,
+      "explanation": "This is the key coroutine intuition: concurrency is not parallelism. A race appears anywhere a suspension point sits between a read and a write, even on one thread. @Volatile does not help because the issue is not memory visibility, but atomicity of the read-modify-write operation.",
+      "code": "var counter = 0\nList(100) { async { val read = counter; yield(); counter = read + 1 } }.awaitAll()"
+    },
+    {
+      "id": "co-2",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What is wrong with this catch block?",
+      "options": [
+        "Nothing — this is correct error handling",
+        "It swallows CancellationException, so the parent treats the cancelled coroutine as completed successfully",
+        "It should catch Throwable instead of Exception",
+        "It is missing a finally block"
+      ],
+      "correctIndex": 1,
+      "explanation": "CancellationException is a control signal for structured concurrency, not a domain error. Swallowing it breaks cancellation propagation: the scope thinks the child finished normally. Always rethrow it, for example catch (e: CancellationException) { throw e }, before a general catch.",
+      "code": "try {\n    repository.getUsers(query)\n} catch (e: Exception) {\n    showError(e.message)\n}"
+    },
+    {
+      "id": "co-3",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "When does async { }.await() called immediately on the next line make sense?",
+      "options": [
+        "Always — async is faster than a normal call",
+        "Practically never; it parallelizes nothing, adds overhead, and changes exception propagation",
+        "When you want to run code on another dispatcher",
+        "When the function is not marked suspend"
+      ],
+      "correctIndex": 1,
+      "explanation": "async is useful only when you start several tasks and then wait for all of them. async { X }.await() is a complicated way to write X(), with additional exception wrapping. Use withContext to change dispatchers."
+    },
+    {
+      "id": "co-4",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "A repository suspend function performs a network request. Who is responsible for switching to Dispatchers.IO?",
+      "options": [
+        "The ViewModel — it should call it in launch(Dispatchers.IO)",
+        "The function itself, using withContext(Dispatchers.IO) internally, so it is safe to call from Main",
+        "Nobody — coroutines choose the correct thread automatically",
+        "The DI layer, by injecting the dispatcher into the ViewModel"
+      ],
+      "correctIndex": 1,
+      "explanation": "Main-safety means a suspend function must be safe to call from any dispatcher, including Main. Forcing callers to know the implementation detail that something is I/O breaks encapsulation; if the repository later changes to an in-memory cache, all those calls would be wrong."
+    },
+    {
+      "id": "co-5",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "How does collectLatest differ from collect when processing search requests?",
+      "options": [
+        "collectLatest skips values, collect processes all of them",
+        "collectLatest cancels processing of the previous value when a new one appears",
+        "collectLatest is asynchronous, collect blocks",
+        "collectLatest deduplicates identical values"
+      ],
+      "correctIndex": 1,
+      "explanation": "collectLatest does not skip values; it starts the block for each one, but cancels the previous execution if it is still running. This prevents the classic search bug where a slower response for an old query overwrites fresher results. The operator equivalent is flatMapLatest."
+    },
+    {
+      "id": "co-6",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "How does MutableStateFlow.update { } differ from assigning .value = ?",
+      "options": [
+        "update is faster because it skips notifying subscribers",
+        "update performs the operation in a compare-and-set loop, so it is atomic; .value = is a plain write",
+        "update works only inside a coroutine",
+        "There is no difference — update is an alias for .value ="
+      ],
+      "correctIndex": 1,
+      "explanation": "The read-modify-write pattern on .value is race-prone just like a regular field. update repeats the lambda until the write succeeds, so the lambda must be pure and fast because it may run more than once. See the StateFlow scenarios in the Sync tab."
+    },
+    {
+      "id": "co-7",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "A while (true) { heavyComputation() } loop in a coroutine does not react to cancellation. Why?",
+      "options": [
+        "Because cancellation works only on Dispatchers.IO",
+        "Because cancellation is cooperative — code must check isActive or call a suspend function",
+        "Because the while loop blocks the parent Job",
+        "Because the @Cancellable annotation is missing"
+      ],
+      "correctIndex": 1,
+      "explanation": "Coroutines cannot be killed from the outside. Cancellation sets a flag that the code must check itself; kotlinx.coroutines suspend functions, ensureActive(), isActive, and yield() do that. A purely computational loop without those calls will run to completion despite scope cancellation."
+    },
+    {
+      "id": "co-8",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What is SupervisorJob for, and how does it differ from a regular Job?",
+      "options": [
+        "It automatically retries failed tasks",
+        "Failure of one child does not cancel sibling children or the parent",
+        "It allows launching coroutines without a scope",
+        "It guarantees execution on the main thread"
+      ],
+      "correctIndex": 1,
+      "explanation": "With a regular Job, a child failure cancels the parent, which then cancels the remaining children. SupervisorJob isolates failures; viewModelScope uses it so one failed request does not kill the whole screen. Note that supervisorScope applies only to direct children."
+    },
+    {
+      "id": "co-9",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "A runTest test with StandardTestDispatcher does not see an event sent to a Channel, even after advanceUntilIdle(). What is the most common cause?",
+      "options": [
+        "The Channel was closed before receiving",
+        "The collector in backgroundScope starts lazily; UnconfinedTestDispatcher is needed so it receives immediately",
+        "runTest does not support channels",
+        "advanceUntilIdle does not work with Channel.BUFFERED"
+      ],
+      "correctIndex": 1,
+      "explanation": "With StandardTestDispatcher, when the collector starts depends on task ordering in the queue, making the test nondeterministic. Starting the collector with UnconfinedTestDispatcher(testScheduler) makes it start immediately and receive the event at send time. This exact issue occurred in this project’s tests.",
+      "code": "backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {\n    viewModel.effects.collect { into += it }\n}"
+    },
+    {
+      "id": "co-10",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "How does Flow (cold) differ from StateFlow (hot)?",
+      "options": [
+        "Flow runs on IO, StateFlow on Main",
+        "Flow executes from scratch for every collector and has no value; StateFlow always has a value and is shared",
+        "StateFlow does not support map and filter operators",
+        "Flow requires a coroutine, StateFlow does not"
+      ],
+      "correctIndex": 1,
+      "explanation": "A cold Flow is a recipe: each collect runs it separately. StateFlow is a hot value holder: it has an initial value, deduplicates consecutive equal values with built-in distinctUntilChanged semantics, and shares the same value among subscribers. That is why StateFlow fits screen state, while plain Flow fits one-shot queries."
+    },
+    {
+      "id": "co-11",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "Why is GlobalScope discouraged?",
+      "options": [
+        "Because it does not support Dispatchers.Main",
+        "Because the coroutine has no parent — nobody cancels it, leading to leaks and work after the screen closes",
+        "Because it is slower than viewModelScope",
+        "Because it works only in tests"
+      ],
+      "correctIndex": 1,
+      "explanation": "GlobalScope is like new Thread() without keeping a reference: nothing cancels it, so the coroutine can outlive the screen or even the whole user session. It breaks structured concurrency. If work must truly outlive the screen, use an application-scoped CoroutineScope with an explicit lifecycle or WorkManager."
+    },
+    {
+      "id": "co-12",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What does flowOn(Dispatchers.IO) do, and what does it affect?",
+      "options": [
+        "It changes the dispatcher of the collector (the collect block)",
+        "It changes the dispatcher of operators ABOVE it in the chain, and does not affect collect",
+        "It moves the whole chain, including collect, to IO",
+        "It is equivalent to withContext(Dispatchers.IO)"
+      ],
+      "correctIndex": 1,
+      "explanation": "flowOn works upstream in the chain: it affects emission and operators defined before it. The collect block always runs in the caller’s context. This is intentional: collect in the ViewModel remains on Main and can safely update state."
+    },
+    {
+      "id": "rx-1",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "What is the coroutine-world equivalent of RxJava Single<T>?",
+      "options": [
+        "Flow<T>",
+        "suspend fun (): T",
+        "StateFlow<T>",
+        "Deferred<T> created by GlobalScope.async"
+      ],
+      "correctIndex": 1,
+      "explanation": "Single emits exactly one value or an error, which is precisely the semantics of a suspend function returning T. Maybe<T> maps to suspend fun (): T?, and Completable maps to suspend fun (): Unit. Flow corresponds to Observable/Flowable, streams of many values."
+    },
+    {
+      "id": "rx-2",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Which Rx operator corresponds to Flow flatMapLatest?",
+      "options": [
+        "flatMap",
+        "concatMap",
+        "switchMap",
+        "combineLatest"
+      ],
+      "correctIndex": 2,
+      "explanation": "switchMap unsubscribes from the previous inner stream when a new value arrives, exactly like flatMapLatest. flatMap corresponds to flatMapMerge, running concurrently without cancellation, while concatMap is flatMapConcat, sequential with queuing."
+    },
+    {
+      "id": "rx-3",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "What is the main reason Flow replaced RxJava in new Android projects?",
+      "options": [
+        "Flow has more operators",
+        "Structured concurrency — cancellation is inherited from the scope, without manually managing Disposable",
+        "Flow is faster in benchmarks",
+        "RxJava does not support backpressure"
+      ],
+      "correctIndex": 1,
+      "explanation": "In Rx, every subscription must be remembered and disposed, for example CompositeDisposable.clear(); forgetting dispose is a classic leak. In coroutines, cancellation follows the scope structure. Flow also works in Kotlin Multiplatform, while RxJava is a JVM library. Rx still has richer operators and stronger backpressure support."
+    },
+    {
+      "id": "rx-4",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "The Kotlin equivalent of BehaviorSubject<T> is:",
+      "options": [
+        "MutableSharedFlow<T>()",
+        "MutableStateFlow<T>(initial)",
+        "Channel<T>(CONFLATED)",
+        "callbackFlow { }"
+      ],
+      "correctIndex": 1,
+      "explanation": "BehaviorSubject stores the latest value and delivers it to new subscribers, which is StateFlow semantics. PublishSubject, which has only new values and no history, corresponds to MutableSharedFlow without replay. StateFlow differs by requiring an initial value and deduplicating equal values."
+    },
+    {
+      "id": "rx-5",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "You are migrating Single<List<User>> from a legacy repository to a coroutine-based ViewModel. What is the simplest approach?",
+      "options": [
+        "Rewrite the whole repository to coroutines before migrating the ViewModel",
+        "Use the kotlinx-coroutines-rx3 bridge: single.await()",
+        "Manually wrap the subscription in suspendCancellableCoroutine",
+        "Block the thread with single.blockingGet()"
+      ],
+      "correctIndex": 1,
+      "explanation": "kotlinx-coroutines-rx3 provides ready-made bridges in both directions: await() for Single/Maybe, asFlow() for Observable, and asObservable() back. It lets you migrate gradually from presentation downward. blockingGet() blocks a thread and defeats the point of coroutines, while manual suspendCancellableCoroutine duplicates existing code."
+    },
+    {
+      "id": "rx-6",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "How do subscribeOn and observeOn differ in RxJava?",
+      "options": [
+        "subscribeOn affects emission (the source), observeOn switches the thread for operators below it",
+        "subscribeOn affects receiving, observeOn affects emission",
+        "Both do the same thing; observeOn is deprecated",
+        "subscribeOn works once, observeOn only in Flowable"
+      ],
+      "correctIndex": 0,
+      "explanation": "subscribeOn chooses the thread on which the source starts, and only the first call in the chain matters. observeOn switches the thread for everything after it and can appear multiple times. In coroutines this split disappears: flowOn works upstream, while collect always runs in the caller’s context."
+    },
+    {
+      "id": "rx-7",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "What does RxJava have more of than Flow?",
+      "options": [
+        "Kotlin Multiplatform support",
+        "Backpressure as a first-class concept (Flowable with strategies) and richer time-based operators",
+        "Compose integration",
+        "Type safety"
+      ],
+      "correctIndex": 1,
+      "explanation": "Flowable has explicit backpressure strategies such as BUFFER, DROP, and LATEST, and Rx offers mature time operators: window, throttleFirst, sample, debounce in many variants. In Flow, some of this is assembled manually with buffer(), conflate(), and sample(). In typical mobile apps it is rarely needed."
+    },
+    {
+      "id": "clean-1",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "A class reads a file, parses JSON, and caches the result. Which principle does it violate, and how should it be fixed?",
+      "options": [
+        "Open/Closed — add a base interface",
+        "Single Responsibility — split it into a source, a parser, and a repository that wires them together",
+        "Liskov Substitution — extract a base class",
+        "It violates none — “providing data” is one cohesive responsibility"
+      ],
+      "correctIndex": 1,
+      "explanation": "It has three reasons to change: the data format, the source, and the cache policy. Splitting it into LessonsSource (where from), LessonsJsonParser (how to understand it), and LessonJsonRepository (wiring plus cache) lets the parser be tested without Android and the source be replaced by network without touching parsing."
+    },
+    {
+      "id": "clean-2",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "A UserRepository interface has getUsers, setFavorite, exportCsv, syncWithCloud, and clearCache. Which principle does that violate?",
+      "options": [
+        "Dependency Inversion",
+        "Interface Segregation",
+        "Liskov Substitution",
+        "Open/Closed"
+      ],
+      "correctIndex": 1,
+      "explanation": "Interface Segregation says a client should not depend on methods it does not use. The list screen needs two methods, but a test fake must implement five. The fix is several narrow interfaces, possibly implemented by one class, like UserRepository plus NetworkFailureSwitch in this project."
+    },
+    {
+      "id": "clean-3",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "An implementation of an interface throws UnsupportedOperationException in one method. Which principle is broken?",
+      "options": [
+        "Single Responsibility",
+        "Liskov Substitution",
+        "Interface Segregation",
+        "Open/Closed"
+      ],
+      "correctIndex": 1,
+      "explanation": "LSP says a subtype must be usable wherever the base type is expected, without surprises. Throwing an exception forces clients to check the concrete type, such as if (repo is ReadOnly), defeating the abstraction. It is usually also a signal that ISP is broken: the interface is too broad."
+    },
+    {
+      "id": "clean-4",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "A sealed interface forces every when to be updated after adding a new subtype. Does that violate Open/Closed?",
+      "options": [
+        "Yes — we modify existing code instead of extending it",
+        "It is a deliberate trade-off: we lose some OCP and gain compiler-checked exhaustiveness",
+        "No, because when is not part of the class",
+        "Yes, so sealed should be replaced with open inheritance"
+      ],
+      "correctIndex": 1,
+      "explanation": "This is a real trade-off, not blind rule following. An open hierarchy fits OCP better, but allows a silent runtime bug when a new type is forgotten. sealed turns that into a compile error; for finite sets such as states, content blocks, or intents, that is usually the better choice."
+    },
+    {
+      "id": "clean-5",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "A project has domain/, data/, and presentation/ folders, but the ViewModel imports a Retrofit API class. What does that mean?",
+      "options": [
+        "Nothing bad, if the import is in one place",
+        "This is not Clean Architecture — dependency direction matters, not folder structure",
+        "It violates Open/Closed",
+        "It is only an aesthetic problem"
+      ],
+      "correctIndex": 1,
+      "explanation": "Folders are a convention; architecture is defined by the dependency graph. A ViewModel that knows Retrofit means presentation depends directly on an infrastructure detail. Tests then need a server or HTTP mocks, and changing the networking library touches the presentation layer."
+    },
+    {
+      "id": "solid-1",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "A class reads a file, parses JSON, and caches the result. Which principle does it violate, and how should it be fixed?",
+      "options": [
+        "Open/Closed — add a base interface",
+        "Single Responsibility — split it into a source, a parser, and a repository that wires them together",
+        "Liskov Substitution — extract a base class",
+        "It violates none — “providing data” is one cohesive responsibility"
+      ],
+      "correctIndex": 1,
+      "explanation": "It has three reasons to change: the data format, the source, and the cache policy. Splitting it into LessonsSource (where from), LessonsJsonParser (how to understand it), and LessonJsonRepository (wiring plus cache) lets the parser be tested without Android and the source be replaced by network without touching parsing."
+    },
+    {
+      "id": "solid-2",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "A UserRepository interface has getUsers, setFavorite, exportCsv, syncWithCloud, and clearCache. Which principle does that violate?",
+      "options": [
+        "Dependency Inversion",
+        "Interface Segregation",
+        "Liskov Substitution",
+        "Open/Closed"
+      ],
+      "correctIndex": 1,
+      "explanation": "Interface Segregation says a client should not depend on methods it does not use. The list screen needs two methods, but a test fake must implement five. The fix is several narrow interfaces, possibly implemented by one class, like UserRepository plus NetworkFailureSwitch in this project."
+    },
+    {
+      "id": "solid-3",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "An implementation of an interface throws UnsupportedOperationException in one method. Which principle is broken?",
+      "options": [
+        "Single Responsibility",
+        "Liskov Substitution",
+        "Interface Segregation",
+        "Open/Closed"
+      ],
+      "correctIndex": 1,
+      "explanation": "LSP says a subtype must be usable wherever the base type is expected, without surprises. Throwing an exception forces clients to check the concrete type, such as if (repo is ReadOnly), defeating the abstraction. It is usually also a signal that ISP is broken: the interface is too broad."
+    },
+    {
+      "id": "solid-4",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "A sealed interface forces every when to be updated after adding a new subtype. Does that violate Open/Closed?",
+      "options": [
+        "Yes — we modify existing code instead of extending it",
+        "It is a deliberate trade-off: we lose some OCP and gain compiler-checked exhaustiveness",
+        "No, because when is not part of the class",
+        "Yes, so sealed should be replaced with open inheritance"
+      ],
+      "correctIndex": 1,
+      "explanation": "This is a real trade-off, not blind rule following. An open hierarchy fits OCP better, but allows a silent runtime bug when a new type is forgotten. sealed turns that into a compile error; for finite sets such as states, content blocks, or intents, that is usually the better choice."
+    },
+    {
+      "id": "solid-5",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "Which symptom most often reveals a Dependency Inversion violation?",
+      "options": [
+        "The class has more than 200 lines",
+        "A unit test requires the network, a database, or an Android Context",
+        "The interface has more than 5 methods",
+        "A method accepts more than 3 parameters"
+      ],
+      "correctIndex": 1,
+      "explanation": "If high-level logic depends directly on infrastructure details, it cannot be isolated in a test. Needing an emulator, a server, or a database to test a business rule is the most practical indicator that DIP has been violated."
+    },
+    {
+      "id": "cmp-1",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "How does remember { } differ from rememberSaveable { }?",
+      "options": [
+        "rememberSaveable works only with primitive types",
+        "remember survives recomposition; rememberSaveable also survives configuration changes and process death",
+        "remember is faster because it does not serialize",
+        "There is no difference except the name"
+      ],
+      "correctIndex": 1,
+      "explanation": "remember caches a value across recompositions, but it is lost on screen rotation. rememberSaveable stores it in a Bundle through a Saver, so it survives configuration changes and process death. In MVI, both are rarely needed for screen state because that state lives in the ViewModel."
+    },
+    {
+      "id": "cmp-2",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "A LazyColumn list without a key parameter behaves strangely when an item is removed from the middle. Why?",
+      "options": [
+        "Because LazyColumn requires key to work",
+        "Without a stable key, Compose identifies items by position, so state and animations get assigned to the wrong items",
+        "Because missing key disables view recycling",
+        "Because a key is needed only for animations"
+      ],
+      "correctIndex": 1,
+      "explanation": "By default, an item’s identity is its index. After removing an item from the middle, all following items “shift”, so state remembered per item, such as expansion, scroll, or animation, moves to the wrong row. key = { it.id } binds state to data identity, not position."
+    },
+    {
+      "id": "cmp-3",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "When is using derivedStateOf justified?",
+      "options": [
+        "Always when computing a value derived from state",
+        "When frequently changing state produces a value that changes rarely, limiting recompositions",
+        "To store state that survives screen rotation",
+        "For background computations off the main thread"
+      ],
+      "correctIndex": 1,
+      "explanation": "The classic example is listState.firstVisibleItemIndex > 0 for an “up” button. Scroll changes every frame, but the boolean result changes rarely, so derivedStateOf limits recompositions to actual result changes. For cheap computations from rarely changing sources, it is unnecessary overhead."
+    },
+    {
+      "id": "cmp-4",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "How should one-off effects from a ViewModel be collected in a Composable?",
+      "options": [
+        "In an init block of the Composable function",
+        "In LaunchedEffect with a key stable with respect to the ViewModel instance",
+        "In remember { }",
+        "Using collectAsState()"
+      ],
+      "correctIndex": 1,
+      "explanation": "LaunchedEffect starts a coroutine tied to the composition lifecycle and cancels it when leaving; when the key changes, it restarts. The key should be a stable reference such as viewModel, not mutable state, otherwise the collector would restart on every state change and lose events. collectAsState is for state, not events."
+    },
+    {
+      "id": "cmp-5",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "What is type stability (@Stable/@Immutable) in Compose and why does it matter?",
+      "options": [
+        "It guarantees thread safety for the type",
+        "It lets Compose skip recomposition when parameters have not changed",
+        "It forces the use of data class",
+        "It enables automatic memoization of function results"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose can skip recomposition if all parameters are stable and equal to their previous values. An unstable type, such as a java.util List instead of kotlinx ImmutableList or a class with var, forces recomposition every time. That is why MVI State should hold immutable structures."
+    },
+    {
+      "id": "cmp-6",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Which way of passing state to a component makes golden tests and previews easier?",
+      "options": [
+        "Injecting the ViewModel into every component",
+        "State hoisting — the component takes state and event lambdas as parameters",
+        "Using CompositionLocal for screen state",
+        "A global state object"
+      ],
+      "correctIndex": 1,
+      "explanation": "A stateless component that accepts (state, onIntent) can be rendered with any state, including an error state, without starting the ViewModel or the whole app. This makes golden tests trivial: pass a prepared State and compare the bitmap. In MVI this pattern emerges naturally."
+    },
+    {
+      "id": "test-1",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "What exactly does “smoke test” mean?",
+      "options": [
+        "A performance test under load",
+        "A test role: a narrow set of checks that the build is not fundamentally broken",
+        "A UI rendering test to a bitmap",
+        "A test run only on a device"
+      ],
+      "correctIndex": 1,
+      "explanation": "A smoke test is a role, not a technology. It answers whether it is worth running the rest of the tests at all: whether the DI graph builds, the start screen renders, and the main path works. It can be a unit or UI test; scope and timing define it."
+    },
+    {
+      "id": "test-2",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "What are golden (screenshot) tests, and what do they catch better than UI tests?",
+      "options": [
+        "They check rendering performance",
+        "They render a component and compare it with an approved baseline, catching visual regressions such as padding, colors, and clipped text",
+        "They test business logic from state snapshots",
+        "They verify accessibility"
+      ],
+      "correctIndex": 1,
+      "explanation": "An assertion like onNodeWithText(\"Anna\").assertIsDisplayed() also passes when the text is white on a white background or clipped off-screen. A golden test compares pixels. Tools include Paparazzi and Roborazzi on the JVM without an emulator, Compose Preview Screenshot Testing, and swift-snapshot-testing on iOS."
+    },
+    {
+      "id": "test-3",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Why does MVI work especially well with golden tests?",
+      "options": [
+        "Because MVI forces the use of Compose",
+        "Because any State can be passed directly and rendered without going through interactions",
+        "Because State is automatically serialized to a file",
+        "Because the reducer generates screenshots"
+      ],
+      "correctIndex": 1,
+      "explanation": "To photograph an error state in MVVM, you usually have to simulate a network failure and click through the path. In MVI, UsersState(error = \"HTTP 503\") and render is enough. Every state variant becomes a one-line test case."
+    },
+    {
+      "id": "test-4",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "In a KMP project you have a reducer in commonMain. Where should its logic be tested?",
+      "options": [
+        "Separately in Kotlin tests and in XCTest in Xcode",
+        "Once in commonTest — the same tests run on the JVM and on the iOS simulator",
+        "Only in androidHostTest",
+        "In instrumentation tests on both platforms"
+      ],
+      "correctIndex": 1,
+      "explanation": "Tests in commonTest compile for every target: ./gradlew :shared:testAndroidHostTest and :shared:iosSimulatorArm64Test run the same code. Duplicating these tests in Swift doubles maintenance with no gain; keep only truly iOS-specific tests in Xcode, such as the Swift layer and XCUITest."
+    },
+    {
+      "id": "test-5",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "A ViewModel test with a 350 ms debounce and 700 ms network delay runs in milliseconds. How?",
+      "options": [
+        "By reducing delays in test configuration",
+        "runTest with TestDispatcher uses virtual time — advanceTimeBy moves the clock without real waiting",
+        "By running tests in parallel",
+        "By replacing delay with Thread.sleep(0)"
+      ],
+      "correctIndex": 1,
+      "explanation": "TestScheduler virtualizes time: delay(700) completes immediately after advanceUntilIdle(). This lets you test real timeouts and debounce without slowing the build. Changing constants for tests would mean testing different code than production."
+    },
+    {
+      "id": "test-6",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "You are writing a test scenario that demonstrates a race condition. How do you make it repeatable?",
+      "options": [
+        "Run the test 1000 times and check whether it failed at least once",
+        "Force the interleaving with an explicit suspension point, yield, between the read and the write",
+        "Use Thread.sleep with a random duration",
+        "Mark the test as @Flaky and ignore instability"
+      ],
+      "correctIndex": 1,
+      "explanation": "A test that depends on accidental interleaving is unstable and worthless; sometimes it passes despite the bug. Inserting yield() at the critical point makes the race deterministic. That is how the Sync tab scenarios work: they always lose writes on every platform."
+    },
+    {
+      "id": "test-7",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "You are testing a ViewModel that uses Dispatchers.Main. What should be done in setUp?",
+      "options": [
+        "Nothing — Dispatchers.Main works in JVM tests",
+        "Dispatchers.setMain(testDispatcher), and Dispatchers.resetMain() in tearDown",
+        "Replace viewModelScope with your own CoroutineScope",
+        "Run the test on Robolectric"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dispatchers.Main requires an Android Looper, which JVM tests do not have; without replacement you get ModuleNotFound or IllegalStateException. Dispatchers.setMain from kotlinx-coroutines-test installs a TestDispatcher so viewModelScope uses virtual time. resetMain prevents state leaking between tests."
+    },
+    {
+      "id": "test-8",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Why test the DI dependency graph?",
+      "options": [
+        "To measure app startup time",
+        "Because a missing definition appears only at runtime; the test turns it into a build failure",
+        "Because Koin requires tests to work",
+        "To generate module documentation"
+      ],
+      "correctIndex": 1,
+      "explanation": "Koin resolves dependencies lazily, so a missing definition appears only when a screen is first opened, possibly by a user. A simple test calling koin.get() for key types moves that failure to CI. The DI graph is code too, and it breaks too."
+    },
+    {
+      "id": "mvi-11",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "Middleware in MviStore observes reductions. Why is it deliberately NOT allowed to change state?",
+      "options": [
+        "Because it runs on another thread",
+        "Because it would create a second hidden mutation point beside the reducer",
+        "Because middleware is called before reduction",
+        "Because it has no access to the State object"
+      ],
+      "correctIndex": 1,
+      "explanation": "The entire value of MVI relies on exactly one place where state transitions happen. Middleware that can mutate state would turn a predictable chain into a system where state changes in places invisible on the timeline. Logging, analytics, and crash reporting do not require mutation."
+    },
+    {
+      "id": "mvi-12",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A reducer returns the same state object (before == after). How can the store use that?",
+      "options": [
+        "Skip notifying subscribers and do not start the side effect",
+        "Automatically retry the intent",
+        "Remove the entry from the timeline",
+        "Report an error — a reducer should always return a new object"
+      ],
+      "correctIndex": 0,
+      "explanation": "StateFlow already deduplicates equal values, so the UI will not refresh unnecessarily. In addition, the store can infer that the intent was ignored, for example a tap during saving, and skip I/O. UsersViewModel uses exactly this pattern for FavoriteToggled."
+    },
+    {
+      "id": "mvi-13",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A detail screen reads data from the same ViewModel as the list. What is the main advantage?",
+      "options": [
+        "Memory savings",
+        "No data duplication — the star in the list and details cannot diverge",
+        "Faster navigation",
+        "Ability to use the same reducer"
+      ],
+      "correctIndex": 1,
+      "explanation": "Two independent sources of the same data sooner or later fall out of sync, because every change must be propagated. One source of truth eliminates that entire class of bugs. The trade-off is coupling between screens, so independent features are better served by separate stores."
+    },
+    {
+      "id": "mvi-14",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A store has a list of 10,000 items. The reducer does state.copy(users = ...) on every intent. Is that a problem?",
+      "options": [
+        "Yes, copy copies the whole list, so mutable state is needed",
+        "No, copy creates a new state object, but references to unchanged collections are shared",
+        "Yes, therefore MVI is unsuitable for large lists",
+        "No, because Kotlin optimizes copy into in-place mutation"
+      ],
+      "correctIndex": 1,
+      "explanation": "data class copy() is shallow: it copies references, not collection contents. The cost is proportional to the number of fields, not the amount of data. Real cost appears only when the list is actually transformed with map or filter, and that is independent of the architectural pattern."
+    },
+    {
+      "id": "co-13",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "How does coroutineScope { } differ from supervisorScope { }?",
+      "options": [
+        "coroutineScope runs on Main, supervisorScope on Default",
+        "In coroutineScope, a child failure cancels siblings; in supervisorScope, children are isolated",
+        "supervisorScope does not wait for children to finish",
+        "coroutineScope cannot contain async"
+      ],
+      "correctIndex": 1,
+      "explanation": "Both wait for all children to complete, but they differ in error propagation. Use coroutineScope when all tasks are required and a missing one makes the result useless. Use supervisorScope when tasks are independent and a partial result still has value."
+    },
+    {
+      "id": "co-14",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What does the buffer() operator do in Flow?",
+      "options": [
+        "Groups values into lists of a specified size",
+        "Lets the producer continue emitting while the consumer is still processing, separating them with a buffer",
+        "Writes values to a disk cache",
+        "Delays emission by a specified time"
+      ],
+      "correctIndex": 1,
+      "explanation": "By default, Flow is sequential: emission waits for collect to finish. buffer() introduces a channel between them, so production and consumption run concurrently, useful when both stages are costly. Variants include conflate(), which keeps only the latest value, and collectLatest, which cancels processing."
+    },
+    {
+      "id": "co-15",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "When is withContext(Dispatchers.Main) in a ViewModel unnecessary?",
+      "options": [
+        "Always — a ViewModel should not touch Main",
+        "When using viewModelScope, which runs on Dispatchers.Main.immediate by default",
+        "When updating StateFlow",
+        "When the function is marked suspend"
+      ],
+      "correctIndex": 1,
+      "explanation": "viewModelScope uses Dispatchers.Main.immediate by default, so the code is already running on the main thread. An extra withContext(Main) is unnecessary overhead. It is also worth knowing that updating StateFlow is thread-safe and does not require Main."
+    },
+    {
+      "id": "co-16",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What happens when an unhandled exception is thrown inside launch { } in viewModelScope?",
+      "options": [
+        "It is silently ignored",
+        "It goes to CoroutineExceptionHandler, and without one it crashes the app",
+        "It is retried automatically",
+        "It cancels all other coroutines in viewModelScope"
+      ],
+      "correctIndex": 1,
+      "explanation": "launch propagates exceptions up the hierarchy; without a handler, they reach the platform default handler and the app crashes. viewModelScope uses SupervisorJob, so it does not cancel siblings, but the exception still must be handled. In async, the exception is stored and thrown only at await()."
+    },
+    {
+      "id": "co-17",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "How does Channel.CONFLATED differ from Channel.BUFFERED?",
+      "options": [
+        "CONFLATED drops new values when the buffer is full; BUFFERED suspends",
+        "CONFLATED stores only the latest value, overwriting the previous one",
+        "CONFLATED works only with one receiver",
+        "There is no difference for a single consumer"
+      ],
+      "correctIndex": 1,
+      "explanation": "CONFLATED, capacity one with overwriting, is appropriate when only the freshest state matters, such as scroll position. It would be a bug for one-off effects: two messages sent quickly would lose the first one. That is why effects should use BUFFERED or UNLIMITED."
+    },
+    {
+      "id": "co-18",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What is callbackFlow used for?",
+      "options": [
+        "Converting Flow to a callback",
+        "Wrapping callback-based APIs into Flow, with cancellation handled by awaitClose",
+        "Running Flow in the background",
+        "Combining many Flows into one"
+      ],
+      "correctIndex": 1,
+      "explanation": "callbackFlow turns classic APIs such as listeners, BroadcastReceiver, or LocationManager into a stream. The key is awaitClose { }, where you unregister the listener on cancellation. Without it, you leak resources; the compiler even enforces its presence."
+    },
+    {
+      "id": "kmp-7",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Why can code in commonMain not use java.time.LocalDate?",
+      "options": [
+        "Because that API is deprecated",
+        "Because it is a JVM class, and commonMain must also compile for Kotlin/Native",
+        "Because it requires minSdk 26",
+        "Because Kotlin has its own type with that name"
+      ],
+      "correctIndex": 1,
+      "explanation": "commonMain can use only APIs available to all targets: the Kotlin standard library and multiplatform libraries. For dates use kotlinx-datetime, for serialization kotlinx-serialization, and for I/O okio or ktor. Alternatively use expect/actual or an interface with per-platform implementations."
+    },
+    {
+      "id": "kmp-8",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "An iOS framework generated from a KMP module exports a Kotlin class with a sealed interface. How does it look in Swift?",
+      "options": [
+        "As a Swift enum with associated values",
+        "As a protocol with implementing classes, without exhaustive switch matching",
+        "As a struct with a type field",
+        "It is not exported"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin sealed has no equivalent in Objective-C, which the interop goes through. In Swift you get a protocol and classes, and switch requires a default branch because the compiler cannot check exhaustiveness. Tools such as SKIE generate native Swift enums and restore exhaustive matching."
+    },
+    {
+      "id": "kmp-9",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Which approach is better for injecting platform dependencies in KMP?",
+      "options": [
+        "Always expect/actual",
+        "An interface in commonMain plus a per-platform implementation injected by DI",
+        "A static singleton initialized in Application",
+        "Reflection"
+      ],
+      "correctIndex": 1,
+      "explanation": "expect/actual is convenient for small things such as a platform name or UUID generator, but it is hard to test and replace because you cannot fake an actual. An interface in commonMain with implementations registered in per-platform DI modules gives full testability and follows DIP."
+    },
+    {
+      "id": "rx-8",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "How does Observable differ from Flowable in RxJava?",
+      "options": [
+        "Observable is synchronous, Flowable is asynchronous",
+        "Flowable supports backpressure; Observable does not",
+        "Observable emits one value, Flowable many",
+        "Flowable is deprecated"
+      ],
+      "correctIndex": 1,
+      "explanation": "Flowable implements Reactive Streams and lets the consumer signal how many values it can accept with request(n), using strategies such as BUFFER, DROP, and LATEST. Observable emits without limits, which can cause OutOfMemoryError with a fast producer and slow consumer. Flow solves this differently, by suspending the emitter."
+    },
+    {
+      "id": "rx-9",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "This code has a memory leak. Where?",
+      "options": [
+        "In the map operator",
+        "The subscription is not stored anywhere or disposed when the screen is destroyed",
+        "In using Schedulers.io()",
+        "There is no leak"
+      ],
+      "correctIndex": 1,
+      "explanation": "subscribe() returns a Disposable that must be kept and disposed, for example CompositeDisposable.clear() in onDestroy or onCleared. Without that, the subscription continues to live and holds a reference to the view. Structured concurrency is exactly what removed this class of bugs in coroutines.",
+      "code": "repository.getUsers(query)\n    .subscribeOn(Schedulers.io())\n    .subscribe { users -> view.showUsers(users) }"
+    },
+    {
+      "id": "rx-10",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "The Flow equivalent of Rx doOnNext is:",
+      "options": [
+        "onStart",
+        "onEach",
+        "onCompletion",
+        "transform"
+      ],
+      "correctIndex": 1,
+      "explanation": "onEach performs a side effect for every value while passing the value downstream, exactly like doOnNext. Related operators are onStart, similar to doOnSubscribe; onCompletion, similar to doFinally and also called on error and cancellation; and catch, similar to onErrorResumeNext."
+    },
+    {
+      "id": "clean-6",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "A repository returns Result<List<User>> instead of throwing an exception. What is the advantage?",
+      "options": [
+        "Better performance",
+        "The error is part of the signature, so the compiler forces handling it",
+        "It enables use in commonMain",
+        "Automatic retry of requests"
+      ],
+      "correctIndex": 1,
+      "explanation": "The Result type makes the error path visible in the API, so it is harder to miss than an undocumented exception. The cost is more ceremony at each call site. Beware the trap: Result can also catch CancellationException, so coroutine code must explicitly rethrow cancellation."
+    },
+    {
+      "id": "clean-7",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "Which elements should NEVER appear in the domain layer?",
+      "options": [
+        "Repository interfaces",
+        "@Serializable, @Entity annotations, Retrofit types, and Android classes",
+        "Domain exception classes",
+        "Business models"
+      ],
+      "correctIndex": 1,
+      "explanation": "The domain must be independent of frameworks; otherwise changing the serialization or database library forces changes in business rules, and tests cannot run without those libraries. In KMP there is an even stricter limit: Android classes in domain would prevent iOS compilation."
+    },
+    {
+      "id": "clean-8",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "DTO → domain model mapping should be located in:",
+      "options": [
+        "The domain layer, because it knows the target model",
+        "The data layer, because it knows both formats and absorbs API contract changes",
+        "The presentation layer, while rendering",
+        "A separate mapper module depending on both layers"
+      ],
+      "correctIndex": 1,
+      "explanation": "A mapper must know the DTO, so it cannot live in domain, which does not know the data layer. Placing it in data ensures that an API contract change stops at one layer boundary and the rest of the application does not feel it."
+    },
+    {
+      "id": "solid-6",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "A class takes 8 dependencies in its constructor. What does that most often signal?",
+      "options": [
+        "Correct use of Dependency Injection",
+        "A Single Responsibility violation — the class does too much",
+        "The need to use a Service Locator",
+        "Missing interfaces for the dependencies"
+      ],
+      "correctIndex": 1,
+      "explanation": "The number of dependencies is often a good approximation of the number of responsibilities. Eight collaborators usually mean several independent jobs that can be split out. Replacing the constructor with a Service Locator hides the problem instead of fixing it; dependencies disappear from the signature, not from the code."
+    },
+    {
+      "id": "solid-7",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "What is “composition over inheritance”, and how is it related to SOLID?",
+      "options": [
+        "It is an alternative to SOLID",
+        "Composition provides flexibility without a rigid hierarchy, supporting LSP and OCP",
+        "It applies only to languages without multiple inheritance",
+        "It requires using the Decorator pattern"
+      ],
+      "correctIndex": 1,
+      "explanation": "Inheritance creates the strongest possible coupling and easily leads to LSP violations when a subclass changes the contract. Composition — injecting a collaborator through an interface — lets behavior be swapped without changing the hierarchy. Kotlin classes are final by default for exactly this reason."
+    },
+    {
+      "id": "cmp-7",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Why should you not create a ViewModel with remember { MyViewModel() }?",
+      "options": [
+        "Because remember does not work with classes",
+        "Because a ViewModel should live in a ViewModelStore; otherwise it will not survive configuration changes and will not be cleaned up",
+        "Because remember requires a key",
+        "Because a ViewModel must be a singleton"
+      ],
+      "correctIndex": 1,
+      "explanation": "remember ties the object to the composition, not to the screen lifecycle. After screen rotation a new ViewModel would be created, losing state and the MVI timeline, and viewModelScope would never be cancelled. viewModel() or koinViewModel() bind the instance to the ViewModelStore."
+    },
+    {
+      "id": "cmp-8",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "What is a recomposition scope, and why does it affect performance?",
+      "options": [
+        "The visibility scope of variables in a Composable",
+        "The smallest part of the UI that Compose can refresh independently",
+        "The thread on which recomposition runs",
+        "A limit on recompositions per second"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose refreshes the smallest possible scope that reads changed state. Reading state high in the tree, such as in the parent of the whole screen, expands that scope to the entire subtree. Therefore state should be read as low as possible, and lambdas can be used for deferred reads instead of passing values."
+    },
+    {
+      "id": "cmp-9",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "Modifier.clickable added after Modifier.padding behaves differently than before it. Why?",
+      "options": [
+        "This is a Compose bug",
+        "Modifier order matters — it determines whether padding belongs to the clickable area",
+        "clickable must always be first",
+        "padding resets earlier modifiers"
+      ],
+      "correctIndex": 1,
+      "explanation": "Modifier builds an ordered chain. padding().clickable() makes the clickable area exclude the padding, while clickable().padding() includes it. This is a common source of accessibility problems: the touch target becomes too small."
+    },
+    {
+      "id": "test-9",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "The testing pyramid says UI tests should be the fewest. What is the main reason?",
+      "options": [
+        "They are the hardest to write",
+        "They are the slowest and most brittle, and when they fail they point to the cause least precisely",
+        "They do not detect regressions",
+        "They require paid tools"
+      ],
+      "correctIndex": 1,
+      "explanation": "A UI test failing after a data-layer change does not tell you where the bug is; you must search the whole stack. A unit test points to a function. Add the time cost, minutes versus milliseconds, and brittleness from animations, timeouts, and device differences causing false alarms."
+    },
+    {
+      "id": "test-10",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Why is it better to use testTag than text lookup in Compose UI tests?",
+      "options": [
+        "testTag is faster",
+        "Text changes with translations and copy edits, so tests break without a logic change",
+        "onNodeWithText does not work with LazyColumn",
+        "testTag is required by Espresso"
+      ],
+      "correctIndex": 1,
+      "explanation": "A test that checks logic should not depend on the exact wording of a message. Changing “Try again” to “Retry” is a copy change, not a behavior change. testTag provides a stable identifier. Exception: when the message content itself is what you are testing, asserting on text is correct."
+    },
+    {
+      "id": "test-11",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "What is the biggest threat to the value of golden tests?",
+      "options": [
+        "Large reference file size",
+        "Blindly approving new baselines, making the test always pass",
+        "Differences between Compose versions",
+        "Lack of dark mode support"
+      ],
+      "correctIndex": 1,
+      "explanation": "Clicking “update all snapshots” after every red test turns the test into a dummy. A golden test requires conscious review of the diff: is it an intended design change or a regression? Without that discipline, it is better not to have such tests than to have false confidence."
+    },
+    {
+      "id": "test-12",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "An integration test of a ViewModel uses a real repository with a 700 ms delay. What is wrong?",
+      "options": [
+        "Nothing; this is a correct integration test",
+        "The test depends on real time and should use a fake or virtual time",
+        "It should use Mockito instead of a real implementation",
+        "700 ms is too short for a stable test"
+      ],
+      "correctIndex": 1,
+      "explanation": "Real time makes tests slow and brittle, especially with timeouts on slower CI. A fake repository with controlled delay plus TestDispatcher gives full control: debounce, cancellation, and timeouts can be checked in milliseconds. Leave real implementations to E2E tests."
+    },
+    {
+      "id": "ds-1",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "A class is used as a key in HashMap. equals is overridden, but hashCode is not. What happens?",
+      "options": [
+        "The compiler reports an error",
+        "map.get(key) returns null despite an equal object existing, because it goes to a different bucket",
+        "HashMap works, only slower",
+        "Objects overwrite each other"
+      ],
+      "correctIndex": 1,
+      "explanation": "HashMap first computes hashCode to choose a bucket, and only then compares with equals inside that bucket. Different hashCodes for equal objects mean lookup happens in the wrong bucket; the entry becomes unreachable even though it is physically in the map. The contract is that equal objects MUST have equal hashCode values, though not necessarily the reverse.",
+      "code": "class Key(val id: String) {\n    override fun equals(other: Any?) = other is Key && other.id == id\n    // missing hashCode()!\n}"
+    },
+    {
+      "id": "ds-2",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "An object used as a HashMap key was mutated after insertion, changing a field that affects hashCode. What is the effect?",
+      "options": [
+        "The map automatically recomputes its position",
+        "The entry becomes unreachable — it is in the old bucket, while lookup searches the new one",
+        "ConcurrentModificationException is thrown",
+        "Nothing — HashMap keeps a copy of the key"
+      ],
+      "correctIndex": 1,
+      "explanation": "HashMap computes the bucket only on insertion. Mutating the key leaves the object physically in the old place while get() searches in the new one. The entry is still in the map, visible during iteration, but unreachable by key. That is why keys should be immutable; in Kotlin, use a data class with only val properties."
+    },
+    {
+      "id": "ds-3",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "What is the complexity of get() in HashMap in the pessimistic case (Java 8+)?",
+      "options": [
+        "O(1) always",
+        "O(log n) — the bucket degenerates into a red-black tree",
+        "O(n) always",
+        "O(n log n)"
+      ],
+      "correctIndex": 1,
+      "explanation": "Average complexity is O(1), but under collisions a bucket is a list, which used to give O(n). Since Java 8, a bucket with more than 8 entries turns into a balanced tree, so the pessimistic case is O(log n). This requires keys to be Comparable; for other types degradation can be worse."
+    },
+    {
+      "id": "ds-4",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "When is LinkedHashMap a better choice than HashMap?",
+      "options": [
+        "Always — it is faster",
+        "When you need predictable iteration order or an LRU cache (accessOrder = true)",
+        "When keys are numbers",
+        "When the map is shared between threads"
+      ],
+      "correctIndex": 1,
+      "explanation": "LinkedHashMap maintains a doubly linked list of entries, giving insertion order, or access order when accessOrder=true. That second option plus removeEldestEntry is the classic LRU cache implementation in a dozen lines. The cost is extra memory for pointers."
+    },
+    {
+      "id": "ds-5",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "You are implementing an LRU cache. Which structure gives O(1) for get and put?",
+      "options": [
+        "ArrayList sorted by access time",
+        "HashMap + doubly linked list, or LinkedHashMap with accessOrder",
+        "TreeMap with timestamp as key",
+        "PriorityQueue"
+      ],
+      "correctIndex": 1,
+      "explanation": "HashMap gives O(1) lookup, and a doubly linked list gives O(1) moving a node to the front and removing from the tail. A list alone would need O(n) lookup; a tree alone would be O(log n). This is a classic interview problem, and Java/Kotlin already provides the solution with LinkedHashMap."
+    },
+    {
+      "id": "ds-6",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "How does an LRU cache strategy differ from LFU?",
+      "options": [
+        "LRU removes the oldest entry, LFU the largest",
+        "LRU removes the least recently used entry, LFU the least frequently used entry",
+        "LRU works in memory, LFU on disk",
+        "They are two names for the same algorithm"
+      ],
+      "correctIndex": 1,
+      "explanation": "LRU looks at TIME of last access, while LFU looks at COUNT of accesses. LFU protects constantly popular items better, but suffers from cache pollution: an item popular in the past can keep occupying space despite no current traffic. That is why variants with time windows or counter decay are used."
+    },
+    {
+      "id": "ds-7",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "A repository cache stores results indefinitely. What is the main risk?",
+      "options": [
+        "A memory leak and serving stale data with no invalidation path",
+        "Slower reads",
+        "A Single Responsibility violation",
+        "No risk — cache always improves behavior"
+      ],
+      "correctIndex": 1,
+      "explanation": "A cache without eviction and invalidation policy grows without bound and eventually serves stale data. You need a size limit such as LRU, TTL, or event-based invalidation after writes. In this project, the lesson cache is intentionally indefinite because the content is immutable while the app runs."
+    },
+    {
+      "id": "ds-8",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "What is a cache stampede (thundering herd), and how can it be prevented?",
+      "options": [
+        "A cache overflow caused by too-large objects",
+        "A flood of parallel requests after an entry expires; prevent it by request deduplication",
+        "A key collision in HashMap",
+        "Clearing the cache too often"
+      ],
+      "correctIndex": 1,
+      "explanation": "When a popular entry expires, all parallel requests hit the source at once. Solutions include a single flight per key, such as a per-key mutex or shared Deferred, background refresh before expiry, or randomized TTL jitter. In coroutines, a key → Deferred map fits naturally."
+    },
+    {
+      "id": "ds-9",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "When is SparseArray worth using instead of HashMap<Integer, V> on Android?",
+      "options": [
+        "Always — SparseArray is faster",
+        "For small and medium collections with int keys, because it avoids autoboxing and Entry allocations",
+        "When keys are String",
+        "When the collection is shared between threads"
+      ],
+      "correctIndex": 1,
+      "explanation": "SparseArray stores two arrays, int[] and Object[], and searches with binary search, avoiding boxing and Entry objects. The memory gain is real for hundreds of entries, but lookup is O(log n) and inserting in the middle requires shifting the array. For thousands of entries, HashMap usually wins."
+    },
+    {
+      "id": "ds-10",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "What is the complexity of contains() for List and for Set?",
+      "options": [
+        "Both O(1)",
+        "List O(n), hash Set O(1)",
+        "List O(log n), Set O(n)",
+        "Both O(n)"
+      ],
+      "correctIndex": 1,
+      "explanation": "A List must scan elements one by one. HashSet computes hashCode and checks one bucket. This is the most common single optimization in code: a loop with listOf(...).contains(x) inside gives O(n*m), while replacing it with a Set makes it O(n). In this project savingFavorites is a set for exactly this reason."
+    },
+    {
+      "id": "ds-11",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "How does MutableList differ from List in Kotlin at runtime?",
+      "options": [
+        "List is immutable and protected from changes through other references",
+        "It is the same object — List only gives a read-only interface, not an immutability guarantee",
+        "List is copied on every assignment",
+        "List is always implemented by an array"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin distinguishes read-only and mutable interfaces, but underneath it is usually the same ArrayList. Casting List to MutableList, or passing the same instance elsewhere, can mutate it behind the reference holder’s back. True immutability comes from kotlinx.collections.immutable or a defensive copy."
+    },
+    {
+      "id": "ds-12",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Which collection type is best for MVI state holding a list in Compose?",
+      "options": [
+        "MutableList — it allows in-place updates",
+        "ImmutableList / PersistentList — it is stable for Compose and therefore does not force recomposition",
+        "Array — best performance",
+        "Sequence — lazy evaluation"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose treats List as unstable because it cannot know whether a mutable implementation sits underneath, so a component accepting List recomposes even with identical content. kotlinx.collections.immutable provides types marked stable. This is a real optimization for large lists."
+    },
+    {
+      "id": "ds-13",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "Why does Kotlin require a data class to have all fields in the constructor for equals/hashCode?",
+      "options": [
+        "To limit the number of fields",
+        "Because generated equals/hashCode include only constructor parameters; fields in the body are ignored",
+        "Because fields in the body cannot be val",
+        "It is a compiler limitation without justification"
+      ],
+      "correctIndex": 1,
+      "explanation": "This is a common source of subtle bugs: a property declared in the class body is not included in equals, hashCode, or copy. Two objects differing only by that property will be “equal”, which breaks Set behavior, map keys, and state comparisons in MVI."
+    },
+    {
+      "id": "ds-14",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "A cache stores objects in a class field in KMP. What must you watch out for with multiple threads?",
+      "options": [
+        "Nothing — Kotlin/Native freezes objects automatically",
+        "A race between reads and writes; you need atomicity or confinement to one dispatcher",
+        "Cache does not work in Kotlin/Native",
+        "You must use @Volatile on every platform"
+      ],
+      "correctIndex": 1,
+      "explanation": "After the new Kotlin/Native memory model, sharing state is allowed, but that does not make it safe. The pattern “check cache, if empty fetch and store” has a classic race: two calls can fetch data twice. Solutions include Mutex, atomic references, or a shared Deferred."
+    },
+    {
+      "id": "ds-15",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "How does Sequence differ from List in a map { }.filter { }.first() chain?",
+      "options": [
+        "Sequence is always faster",
+        "List creates intermediate collections at every step; Sequence processes element by element and stops at the first hit",
+        "Sequence runs asynchronously",
+        "There is no difference; the compiler optimizes both cases"
+      ],
+      "correctIndex": 1,
+      "explanation": "On a list, every operator creates a new collection and processes all elements. Sequence is lazy: it passes a single element through the whole chain and stops when a result is found. The benefit grows with collection size and chain length, but for small collections Sequence overhead can exceed the savings."
+    },
+    {
+      "id": "ds-16",
+      "category": "datastructures",
+      "difficulty": "senior",
+      "text": "What is the proper way to invalidate a cache after writing data?",
+      "options": [
+        "Clear the whole cache on every write",
+        "Invalidate the affected entry or update it with the written value",
+        "Set a very short TTL",
+        "Do not invalidate; data will refresh by itself"
+      ],
+      "correctIndex": 1,
+      "explanation": "Clearing everything works, but wastes valid entries and causes a wave of requests. Precise invalidation, or write-through by writing to the source and cache together, preserves consistency without losing performance. A short TTL is a workaround that does not solve stale reads immediately after a write."
+    },
+    {
+      "id": "kt-1",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "How does an inline function with reified differ from a regular generic function?",
+      "options": [
+        "reified makes the call faster",
+        "reified preserves the type at runtime, so you can use is T and T::class despite type erasure",
+        "reified works only with primitive types",
+        "It is a synonym for @JvmStatic"
+      ],
+      "correctIndex": 1,
+      "explanation": "JVM generics use type erasure, so in a regular function T does not exist at runtime. inline copies the body to the call site, where the type is known; reified therefore lets you write inline fun <reified T> Gson.fromJson(json: String): T. The cost is code growth and no direct Java calls."
+    },
+    {
+      "id": "kt-2",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "How does lateinit var differ from by lazy { }?",
+      "options": [
+        "lazy works only with var, lateinit with val",
+        "lateinit requires manual initialization and allows reassignment; lazy initializes once on first read",
+        "lateinit is thread-safe, lazy is not",
+        "There is no difference except syntax"
+      ],
+      "correctIndex": 1,
+      "explanation": "lateinit var is for dependency injection or initialization in onCreate; reading it before assignment throws UninitializedPropertyAccessException. by lazy is a val, computes the value on first use, and is synchronized by default with LazyThreadSafetyMode.SYNCHRONIZED. lateinit does not work with primitive types."
+    },
+    {
+      "id": "kt-3",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What is an inline class (value class) for, and what is its main benefit?",
+      "options": [
+        "Creating immutable classes",
+        "Wrapping a value without allocation overhead; the compiler inlines it to the underlying type",
+        "Speeding up serialization",
+        "Replacing enum"
+      ],
+      "correctIndex": 1,
+      "explanation": "value class UserId(val value: String) gives type safety, so you do not confuse UserId with OrderId, without creating an object at runtime because the compiler uses String directly. Boxing still happens when used as a generic type, nullable type, or when cast to an interface."
+    },
+    {
+      "id": "kt-4",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "When will Kotlin report a “Type mismatch” error for generics with out?",
+      "options": [
+        "When the type is nullable",
+        "When trying to write into a covariant structure — out means it only produces values",
+        "When the generic is reified",
+        "When inheriting from an abstract class"
+      ],
+      "correctIndex": 1,
+      "explanation": "out T, covariance, lets you treat List<Dog> as List<Animal>, but only for reading; adding a Cat would break type safety. Symmetrically, in T, contravariance, only consumes. The rule is PECS: Producer Extends, Consumer Super."
+    },
+    {
+      "id": "kt-5",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "How does sealed class differ from sealed interface in Kotlin?",
+      "options": [
+        "sealed interface cannot have subclasses",
+        "A class can implement multiple sealed interfaces, but inherit from only one sealed class",
+        "sealed interface does not work in when",
+        "sealed class is deprecated"
+      ],
+      "correctIndex": 1,
+      "explanation": "Inheritance is single, while interface implementation is multiple. Therefore sealed interface enables cross-cutting hierarchies; in this project UsersIntent is a sealed interface with nested Ui and Internal. Both give the compiler knowledge for exhaustive when checks."
+    },
+    {
+      "id": "kt-6",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What does the ?: (Elvis) operator do together with return?",
+      "options": [
+        "Throws an exception when the value is null",
+        "Allows an early return from a function on null — “val x = y ?: return”",
+        "Converts null to the type’s default value",
+        "It is equivalent to !!"
+      ],
+      "correctIndex": 1,
+      "explanation": "val user = users.firstOrNull { it.id == id } ?: return is an idiomatic guard clause: afterward the compiler knows user is not null through smart cast. Variants include ?: return null, ?: error(\"...\"), and ?: throw. It is clearer than nested if (x != null)."
+    },
+    {
+      "id": "kt-7",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "When will smart cast NOT work despite an if (x != null) check?",
+      "options": [
+        "When x is a local val",
+        "When x is a var property of a class that another thread could change between the check and use",
+        "When x has a generic type",
+        "Smart cast always works"
+      ],
+      "correctIndex": 1,
+      "explanation": "The compiler refuses smart casts for var properties, especially from another module or with a custom getter, because it cannot guarantee the value will not change between check and use. The fix is to assign to a local val, such as val local = state.error ?: return, a common rendering-state pattern."
+    },
+    {
+      "id": "kt-8",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "How do apply and also differ, and run and let?",
+      "options": [
+        "apply/run return the lambda, also/let return the receiver",
+        "apply and run operate on this, also and let on it; apply/also return the receiver, run/let return the lambda result",
+        "They all do the same thing",
+        "let works only with nullable types"
+      ],
+      "correctIndex": 1,
+      "explanation": "There are two axes: how you refer to the receiver, this versus it, and what is returned, the receiver versus the lambda result. apply configures an object with this and returns it. also performs a side effect such as logging with it and returns the object. let transforms or handles null with it and returns the result. run computes on an object with this and returns the result."
+    },
+    {
+      "id": "kt-9",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What happens when Java code calls a Kotlin function with a default parameter?",
+      "options": [
+        "Java uses the default value",
+        "Java must pass all parameters unless @JvmOverloads was added",
+        "The code does not compile",
+        "null is passed"
+      ],
+      "correctIndex": 1,
+      "explanation": "Kotlin generates one method with all parameters plus a synthetic helper method that Java does not call directly. @JvmOverloads generates overloads for parameter combinations. This matters when writing libraries consumed from Java, and it is a common interview topic."
+    },
+    {
+      "id": "kt-10",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What is a delegated property, and what is a classic use case?",
+      "options": [
+        "A property passed in the constructor",
+        "A property whose get/set delegates to another object, such as by lazy, by viewModels, or by remember",
+        "A property protected from changes",
+        "An alias for another property"
+      ],
+      "correctIndex": 1,
+      "explanation": "A delegate implements getValue/setValue, letting logic hook into property access. Standard examples are lazy, observable, vetoable, and maps. On Android, examples include by viewModels(), by remember, and by collectAsState; delegates make the code read like ordinary field access."
+    },
+    {
+      "id": "kt-11",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What does takeIf do, and when is it idiomatic?",
+      "options": [
+        "Gets the first element matching a predicate",
+        "Returns the receiver when the predicate is true, otherwise null; it composes well with Elvis",
+        "Checks the object type",
+        "It is the equivalent of filter for a single value"
+      ],
+      "correctIndex": 1,
+      "explanation": "input.takeIf { it.isNotBlank() } ?: return replaces if (input.isBlank()) return. Its sibling takeUnless reverses the condition. Overuse can be less readable than a plain if, so it is best where the result continues through a call chain."
+    },
+    {
+      "id": "kt-12",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Why are Kotlin classes final by default?",
+      "options": [
+        "For performance reasons",
+        "Because inheritance requires deliberate design — “design for inheritance or prohibit it”",
+        "Because the JVM does not support open classes",
+        "To force the use of interfaces"
+      ],
+      "correctIndex": 1,
+      "explanation": "This directly implements Effective Java advice. A class not designed for inheritance easily breaks LSP when a subclass overrides a method used internally. Kotlin requires explicit open, forcing the author to decide. Practical consequence: mocking classes requires the all-open plugin."
+    },
+    {
+      "id": "and-1",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "What exactly does “process death” mean, and how does it differ from a configuration change?",
+      "options": [
+        "They are the same phenomenon under two names",
+        "The system kills the background process; ViewModel does not survive, only SavedStateHandle/onSaveInstanceState does",
+        "Process death happens only after an app crash",
+        "After process death the app starts from the home screen"
+      ],
+      "correctIndex": 1,
+      "explanation": "A configuration change such as rotation destroys the Activity but the process stays alive, so ViewModel survives. Process death means the whole process is killed under memory pressure; the user returns to the same screen, but all in-memory objects are gone. Only data saved in Bundle, such as SavedStateHandle, survives. These are different scenarios and both need testing."
+    },
+    {
+      "id": "and-2",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "When is SavedStateHandle worth using in MVI?",
+      "options": [
+        "To store the entire screen State",
+        "To save the minimum needed to restore state, such as query or id; the rest is loaded again",
+        "Never, because ViewModel is enough",
+        "To store one-off effects"
+      ],
+      "correctIndex": 1,
+      "explanation": "Bundle size is limited and unsuitable for a user list or cache, because TransactionTooLargeException is possible. Save identifiers and inputs: query, selected category, list position. After process restoration, recreate the rest by normal data loading."
+    },
+    {
+      "id": "and-3",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Why is collecting a Flow in a Composable without lifecycle awareness a problem?",
+      "options": [
+        "It causes a memory leak",
+        "Collection continues while the screen is in the background, wasting resources and possibly updating invisible UI",
+        "Compose does not support Flow",
+        "Flow stops emitting in the background"
+      ],
+      "correctIndex": 1,
+      "explanation": "LaunchedEffect lives as long as the composition, and the composition can remain while the app is in the background. For expensive streams such as location, sensors, or sockets, use collectAsStateWithLifecycle or repeatOnLifecycle(STARTED), which suspend collection outside the visible state."
+    },
+    {
+      "id": "and-4",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "What is WorkManager for, and when is it NOT the right choice?",
+      "options": [
+        "For immediate UI-related tasks; viewModelScope is better for those",
+        "For everything asynchronous",
+        "Only for periodic tasks",
+        "To replace coroutines"
+      ],
+      "correctIndex": 1,
+      "explanation": "WorkManager is for deferred work that must survive app closure and device restart, such as sync or upload. It has overhead: database persistence, system constraints, and delays. Fetching data for a screen belongs in viewModelScope; using WorkManager would introduce visible latency."
+    },
+    {
+      "id": "and-5",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "What is StrictMode and what does it typically detect?",
+      "options": [
+        "A compilation mode with extra warnings",
+        "A runtime tool that detects disk/network operations on the main thread and resource leaks",
+        "A screen layout debugging mode",
+        "A permissions verifier"
+      ],
+      "correctIndex": 1,
+      "explanation": "StrictMode instruments calls and reports violations: I/O on the UI thread, unclosed cursors and streams, and detected Activity instances after destruction. It is enabled in Application for debug builds. It catches problems invisible on a fast developer device but causing ANRs on weaker devices."
+    },
+    {
+      "id": "and-6",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "An app shows an ANR. What is the time threshold for no response to input?",
+      "options": [
+        "500 ms",
+        "About 5 seconds for input events",
+        "Always 10 seconds",
+        "1 minute"
+      ],
+      "correctIndex": 1,
+      "explanation": "It is about 5 seconds for input events, around 10 seconds for a BroadcastReceiver, 20 seconds in the background, and about 20 seconds for services. ANR does not mean an exact-duration freeze; it is enough that the main thread is busy when an event arrives. Common causes are I/O on Main, long database transactions, deadlocks, and excessive GC."
+    },
+    {
+      "id": "and-7",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "How does launchMode singleTop differ from singleTask?",
+      "options": [
+        "singleTop creates a new task; singleTask does not",
+        "singleTop reuses the instance only when it is at the top of the stack; singleTask reuses it within the whole task, clearing what is above it",
+        "They are identical",
+        "singleTask does not allow multiple instances in the system"
+      ],
+      "correctIndex": 1,
+      "explanation": "singleTop calls onNewIntent if the activity is already on top, which protects against duplicates after tapping a notification twice. singleTask additionally removes activities above it. Overusing singleTask can surprisingly change Back button behavior."
+    },
+    {
+      "id": "and-8",
+      "category": "android",
+      "difficulty": "senior",
+      "text": "Why is passing an Activity Context to a singleton dangerous?",
+      "options": [
+        "Because Context is not serializable",
+        "Because the singleton outlives the Activity and holds a reference to a destroyed screen, causing a memory leak",
+        "Because Context is not thread-safe",
+        "Because it violates Dependency Inversion"
+      ],
+      "correctIndex": 1,
+      "explanation": "Activity Context holds the entire view tree and resources. A reference from a longer-lived object prevents memory from being freed; after several rotations, several Activities remain in memory. Pass applicationContext to long-lived objects, and Activity Context only to views."
+    },
+    {
+      "id": "perf-1",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "A list in Compose scrolls with jank. Where should diagnosis start?",
+      "options": [
+        "By reducing the number of items",
+        "With measurement: Layout Inspector / recomposition counts to find excessive recompositions",
+        "By adding remember to every value",
+        "By switching to RecyclerView"
+      ],
+      "correctIndex": 1,
+      "explanation": "Optimization without measurement is guessing. Android Studio tools show recomposition counts per component; typical culprits are unstable parameter types, missing key in LazyColumn, or reading frequently changing state too high in the tree. Only after diagnosis does a code change make sense."
+    },
+    {
+      "id": "perf-2",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "What does it mean that a type is “unstable” for Compose, and how can it be fixed?",
+      "options": [
+        "It can throw an exception, so add try/catch",
+        "Compose cannot assume immutability, so it recomposes every time; @Immutable or immutable collections help",
+        "The type is not thread-safe",
+        "It requires remember"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose skips recomposition only for stable parameters equal to previous ones. A class with var, an interface such as List, or a type from another module without stability metrics is unstable. Fixes include @Immutable/@Stable, kotlinx.collections.immutable, or enabling strong skipping mode."
+    },
+    {
+      "id": "perf-3",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "An app starts slowly. Which metric is key, and what most often hurts it?",
+      "options": [
+        "APK size",
+        "Time To Initial Display; heavy initialization in Application.onCreate hurts it",
+        "Number of methods in dex",
+        "Number of permissions"
+      ],
+      "correctIndex": 1,
+      "explanation": "Application.onCreate blocks the first render. Initialization of analytics libraries, databases, and configuration loading should be lazy or moved to App Startup/background work. Baseline Profiles also help by eliminating code interpretation cost on the first launches."
+    },
+    {
+      "id": "perf-4",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "What does a Baseline Profile do, and what effect does it have?",
+      "options": [
+        "Compresses app resources",
+        "Tells ART which code paths to compile AOT before first launch",
+        "Profiles memory usage at runtime",
+        "Forces R8 full mode"
+      ],
+      "correctIndex": 1,
+      "explanation": "Without a profile, code is initially interpreted and JIT compilation happens only after repeated execution, causing jank on first launch and first screen entry. A Baseline Profile provides a list of critical methods to compile ahead of time. A typical gain is 20–30% faster startup."
+    },
+    {
+      "id": "perf-5",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "A memory leak is detected: an Activity is not freed after rotation. What is the most common cause?",
+      "options": [
+        "Bitmaps are too large",
+        "A reference from a longer-lived object: static field, singleton, unregistered listener, or uncancelled coroutine",
+        "Missing System.gc() call",
+        "Too many fragments"
+      ],
+      "correctIndex": 1,
+      "explanation": "GC will not free an object reachable from a root. Typical sources are a listener registered in onCreate without unregistering, a Handler referencing Activity, a non-static inner class, or an Rx subscription without dispose. Structured concurrency and viewModelScope eliminate many of these cases."
+    },
+    {
+      "id": "perf-6",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "When is it worth passing a lambda instead of a value in Compose (deferred read)?",
+      "options": [
+        "Always — lambdas are faster",
+        "When the value changes frequently: reading inside the component narrows the recomposition scope",
+        "Only for click handling",
+        "When the value is nullable"
+      ],
+      "correctIndex": 1,
+      "explanation": "Modifier.offset { IntOffset(scroll, 0) } reads scroll during the layout phase, so a change does not force recomposition; relayout is enough. Passing the value itself would recompose the whole component on every scroll frame. This is one of the most effective Compose animation optimizations."
+    },
+    {
+      "id": "perf-7",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "An MVI reducer sorts a list of 10,000 items on every intent. How can this be fixed without breaking the pattern?",
+      "options": [
+        "Move sorting to the Composable",
+        "Sort once in the use case when loading, or cache the result in state instead of recalculating on every reduction",
+        "Use a mutable list and sort in place",
+        "Abandon MVI for this screen"
+      ],
+      "correctIndex": 1,
+      "explanation": "A reducer must be fast because it runs on the intent-processing thread. Sorting belongs to business rules, so the natural place is a use case, as SearchUsersUseCase does in this project. Alternatively compute once and store the result in state. A computed get() property is convenient, but it runs on every read."
+    },
+    {
+      "id": "perf-8",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "Which approach best limits the number of requests in typeahead search?",
+      "options": [
+        "Increasing the request timeout",
+        "debounce + distinctUntilChanged + collectLatest",
+        "Caching all possible results",
+        "Searching only after pressing Enter"
+      ],
+      "correctIndex": 1,
+      "explanation": "debounce waits for silence, producing one request instead of one per letter; distinctUntilChanged skips repeats after deleting and typing the same character; collectLatest cancels stale requests. This trio is in UsersViewModel, and tests confirm that quickly typing three letters produces exactly one request."
+    },
+    {
+      "id": "perf-9",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "What does the “jank” metric measure, and what is the frame time budget at 60 Hz?",
+      "options": [
+        "Memory usage; budget 100 MB",
+        "Frames rendered after their deadline; the budget is about 16.7 ms per frame",
+        "The number of recompositions; the budget is 60 per second",
+        "Server response time; budget 200 ms"
+      ],
+      "correctIndex": 1,
+      "explanation": "At 60 Hz, the whole cycle of composition, layout, and drawing must fit within 16.7 ms; at 120 Hz, within 8.3 ms. Exceeding that means a missed frame, which the user sees as a stutter. Measure with JankStats, Macrobenchmark, and Perfetto, not subjective smoothness."
+    },
+    {
+      "id": "perf-10",
+      "category": "performance",
+      "difficulty": "senior",
+      "text": "When should remember with a key be used instead of plain remember?",
+      "options": [
+        "Always — the key speeds up lookup",
+        "When the value depends on a parameter: changing the key forces recomputation",
+        "Only in LazyColumn",
+        "When the value is expensive to compute"
+      ],
+      "correctIndex": 1,
+      "explanation": "remember(userId) { computeFor(userId) } recomputes when userId changes. Plain remember { } would keep the result for the first user and return it after the parameter changes, a very common and hard-to-spot bug because it appears only when navigating between items."
+    },
+    {
+      "id": "mvi-15",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "A screen has two independent areas, each with its own loading operation. How should the state be modeled?",
+      "options": [
+        "One isLoading flag for the whole screen",
+        "Separate state fields per area, or a set of identifiers for operations in progress",
+        "A separate ViewModel for each area",
+        "A list of booleans in area order"
+      ],
+      "correctIndex": 1,
+      "explanation": "A single flag collapses with a second parallel operation: the first one finishes and hides the loader of the second. In this project, the Sync screen uses Set<String> running, and Users uses savingFavorites. A set of identifiers scales to any number of operations without changing the model."
+    },
+    {
+      "id": "mvi-16",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "After returning from a detail screen, the list should show updated data. How should this be solved in MVI?",
+      "options": [
+        "Pass the result through a navigation argument",
+        "Keep a shared source of truth or dispatch a refresh intent on return",
+        "Refresh the list in LaunchedEffect on every recomposition",
+        "Use a global variable"
+      ],
+      "correctIndex": 1,
+      "explanation": "Passing results through navigation quickly becomes complicated. Either both screens read the same store, as in this project, or the list receives a Refresh intent on return. Refreshing on every recomposition is a bug because recomposition happens for many reasons and would trigger a storm of requests."
+    },
+    {
+      "id": "mvi-17",
+      "category": "mvi",
+      "difficulty": "senior",
+      "text": "How do you test that an intent did NOT trigger a side effect?",
+      "options": [
+        "Check logs",
+        "Use a fake that counts calls and verify the counter did not change",
+        "It is not testable",
+        "Check whether state did not change"
+      ],
+      "correctIndex": 1,
+      "explanation": "No state change alone does not prove that no I/O happened; the operation may have run and simply not affected state. A fake with a counter gives an unambiguous assertion. This project tests the absence of a request on a repeated star tap and the request count under debounce this way."
+    },
+    {
+      "id": "co-19",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What happens if you call a suspend function in a coroutine finally block after cancellation?",
+      "options": [
+        "It runs normally",
+        "It throws CancellationException; use withContext(NonCancellable)",
+        "It is skipped",
+        "It blocks the thread"
+      ],
+      "correctIndex": 1,
+      "explanation": "After cancellation, the coroutine is in the cancelling state and every suspend function immediately throws. If finally must perform asynchronous cleanup, such as closing a resource or saving state, wrap it in withContext(NonCancellable). Overusing this mechanism, however, creates code that cannot be stopped."
+    },
+    {
+      "id": "co-20",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "How does Flow.stateIn differ from shareIn?",
+      "options": [
+        "stateIn works only with coroutines",
+        "stateIn returns StateFlow, requiring an initial value and deduplicating; shareIn returns SharedFlow with configurable replay",
+        "shareIn is deprecated",
+        "There is no difference"
+      ],
+      "correctIndex": 1,
+      "explanation": "Both turn a cold Flow into a hot one, sharing a single subscription among receivers. stateIn is for state because it always has a value and skips duplicates; shareIn is for events. The key parameter is SharingStarted; WhileSubscribed(5000) keeps the subscription alive for 5 seconds after the last receiver leaves, surviving rotation."
+    },
+    {
+      "id": "co-21",
+      "category": "coroutines",
+      "difficulty": "senior",
+      "text": "What is SharingStarted.WhileSubscribed(5000) for, and where does that value come from?",
+      "options": [
+        "It is a network request timeout",
+        "It keeps the stream alive for 5 seconds after the last subscriber leaves, surviving screen rotation without restart",
+        "It is the data refresh interval",
+        "It is the maximum lifetime of StateFlow"
+      ],
+      "correctIndex": 1,
+      "explanation": "During screen rotation the subscriber disappears and reappears shortly afterward. Without a delay, the stream would be closed and started again, causing another request. Five seconds is the Android documentation convention: long enough for a configuration change, short enough not to waste background resources."
+    },
+    {
+      "id": "clean-9",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "A use case needs data from two repositories and must combine it. Is that correct?",
+      "options": [
+        "No — a use case should use exactly one repository",
+        "Yes — combining data from multiple sources is a typical business rule",
+        "No — combining belongs in the ViewModel",
+        "Yes, but only through a separate aggregator"
+      ],
+      "correctIndex": 1,
+      "explanation": "This is one of the best justifications for a use case: it encapsulates the knowledge that a given operation needs several sources. Moving that into the ViewModel would tie a business rule to the presentation layer and prevent reuse."
+    },
+    {
+      "id": "clean-10",
+      "category": "clean",
+      "difficulty": "senior",
+      "text": "An app has an offline-capable feature. Where should the “cache or network” decision live?",
+      "options": [
+        "In the ViewModel, because it knows connection state",
+        "In the repository, because it knows its data sources and strategy",
+        "In the use case",
+        "In the UI layer"
+      ],
+      "correctIndex": 1,
+      "explanation": "A repository is a facade over data sources: memory, database, and network. Higher layers ask for data, not where it comes from. If the ViewModel decided the source, changing cache strategy would require presentation changes, and offline behavior would need to be implemented separately on every screen."
+    },
+    {
+      "id": "solid-8",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "You add a new method to an interface used by 10 implementations. What does that signal?",
+      "options": [
+        "Normal API evolution",
+        "A possible ISP violation — perhaps the method belongs in a narrower interface implemented by only some classes",
+        "The need to use an abstract class",
+        "An LSP violation"
+      ],
+      "correctIndex": 1,
+      "explanation": "If only some implementations can provide a meaningful implementation of the new method, the rest will get empty implementations or exceptions, which leads directly to LSP violations. It signals that the interface covers more than one role. The fix is a separate narrow interface implemented by interested classes."
+    },
+    {
+      "id": "solid-9",
+      "category": "solid",
+      "difficulty": "senior",
+      "text": "A class has a method with 5 Boolean parameters. What is the main problem?",
+      "options": [
+        "Too many parameters hurts performance",
+        "Flags usually mean several modes of operation in one method, violating SRP and making calls unreadable",
+        "Boolean should not be a parameter",
+        "Missing default values"
+      ],
+      "correctIndex": 1,
+      "explanation": "A call like process(true, false, true, true, false) is unreadable, and each flag usually means a separate execution path. Usually this can be split into clearly named methods or replaced with a configuration object or enum. Kotlin named arguments improve readability but do not remove excessive responsibility."
+    },
+    {
+      "id": "cmp-10",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "What is CompositionLocal, and when is its use justified?",
+      "options": [
+        "A cache mechanism for components",
+        "Implicitly passing values down the tree, for cross-cutting things such as theme or locale",
+        "A way to manage screen state",
+        "The equivalent of Android Context"
+      ],
+      "correctIndex": 1,
+      "explanation": "CompositionLocal fits values used everywhere and changed rarely: theme, typography, screen density. It should not pass screen state or business dependencies because it hides them from component signatures, makes tests and previews harder, and breaks explicit data flow."
+    },
+    {
+      "id": "cmp-11",
+      "category": "compose",
+      "difficulty": "senior",
+      "text": "A component receives an onClick lambda that is a new instance on every recomposition. What is the effect?",
+      "options": [
+        "A memory leak",
+        "The parameter changes every time, so Compose cannot skip recomposition of the subtree",
+        "Clicks stop working",
+        "No effect — lambdas are always stable"
+      ],
+      "correctIndex": 1,
+      "explanation": "Compose skips recomposition only when all parameters are equal. A new lambda instance on every pass breaks that comparison. The compiler can remember lambdas without captures, or those capturing stable values; the issue appears when unstable types are captured. The remedy is remember or a method reference."
+    },
+    {
+      "id": "test-13",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "A test passes when run alone but fails in the suite. What is the most common cause?",
+      "options": [
+        "The timeout is too short",
+        "Shared state between tests, such as static fields, singletons, or an unreset Dispatchers.Main",
+        "A bug in the test tool",
+        "Slow CI"
+      ],
+      "correctIndex": 1,
+      "explanation": "Test order is variable, so leftovers from one test break another. Common culprits are not calling stopKoin, missing Dispatchers.resetMain, a static cache, or an uncleared in-memory database. Tests must be independent; that is why this project’s Koin tests explicitly call stopKoin()."
+    },
+    {
+      "id": "test-14",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "Why use a fake repository in a test instead of a mocking library?",
+      "options": [
+        "Mocks are always bad",
+        "A fake is faster, does not break on signature refactors, and reads like normal code",
+        "Mocks do not work in KMP",
+        "A fake does not require an interface"
+      ],
+      "correctIndex": 1,
+      "explanation": "Mock-based tests verify calls, so they break when order or signatures change even though behavior remains correct. A fake checks the result, not how it was achieved. A practical KMP point: most mocking libraries rely on JVM reflection and do not work in commonTest, while a fake works everywhere."
+    },
+    {
+      "id": "test-15",
+      "category": "testing",
+      "difficulty": "senior",
+      "text": "What should a golden test verify after a design change?",
+      "options": [
+        "Nothing — approve the new baselines immediately",
+        "A human reviews the diff and consciously decides whether it is an intended change",
+        "Automatic comparison with Figma",
+        "Only that the test compiles"
+      ],
+      "correctIndex": 1,
+      "explanation": "A golden test shifts responsibility to reviewing the visual diff; that is its only mechanism. Automatically approving changes turns it into a dummy that gives false confidence. Reference files therefore belong in the repository and go through code review like any other change."
+    },
+    {
+      "id": "kmp-10",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "You want to use a JVM-only library in commonMain. What are your options?",
+      "options": [
+        "Add it to commonMain; Gradle will handle it",
+        "Define an interface in commonMain and provide per-platform implementations, using expect/actual or DI",
+        "Copy the library code into the project",
+        "Drop iOS support"
+      ],
+      "correctIndex": 1,
+      "explanation": "commonMain compiles for all targets, so a JVM-only dependency breaks the Kotlin/Native build. The standard solution is an abstraction in commonMain, a JVM implementation in androidMain, and a native implementation in iosMain. First check whether a multiplatform equivalent exists, such as ktor, okio, or kotlinx-*."
+    },
+    {
+      "id": "kmp-11",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Why is it worth limiting the public API of the shared KMP module exposed to iOS?",
+      "options": [
+        "Because it reduces framework size and simplifies interop; fewer types cross through Objective-C",
+        "Because Swift does not support more than 100 classes",
+        "Because public API is slower",
+        "Because iOS requires an explicit export list"
+      ],
+      "correctIndex": 0,
+      "explanation": "Every public type ends up in the Objective-C header, increasing framework size and compile time. The narrower the API, the fewer Kotlin peculiarities, such as sealed types, generics, and default values, leak into Swift in inconvenient forms. Expose a facade and mark the rest internal."
+    },
+    {
+      "id": "rx-11",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "Rx code runs on the wrong thread despite subscribeOn(Schedulers.io()). What is a possible cause?",
+      "options": [
+        "subscribeOn works only with Flowable",
+        "There is more than one subscribeOn in the chain, and only the first one counts",
+        "observeOn is missing",
+        "Schedulers.io() does not exist"
+      ],
+      "correctIndex": 1,
+      "explanation": "subscribeOn affects the source subscription, so later calls in the chain are ignored. This is a common bug when composing streams from several layers, each adding its own subscribeOn. observeOn is different: it applies from its position downward and can be used multiple times."
+    },
+    {
+      "id": "rx-12",
+      "category": "rx",
+      "difficulty": "senior",
+      "text": "What is backpressure, and why does Flow not need a separate type like Flowable?",
+      "options": [
+        "It is a limit on the number of subscribers",
+        "It is when a producer emits faster than the consumer can process; Flow solves it by suspending the emitter",
+        "It is an error retry mechanism",
+        "It is a Channel buffer size limit"
+      ],
+      "correctIndex": 1,
+      "explanation": "In Rx, the consumer must explicitly request n items, and Observable without this mechanism can run into OutOfMemoryError. Flow uses suspension: emit() simply waits until the consumer is ready. Backpressure is therefore built into the model, while buffer and conflate intentionally relax it."
+    },
+    {
+      "id": "kmp-12",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "You need a platform abstraction in commonMain. What is the decisive question when choosing between expect/actual and an interface plus DI?",
+      "options": [
+        "Which one compiles faster",
+        "Whether anything in it is worth substituting in a test",
+        "Whether the code lives in the domain or the data layer",
+        "Whether iOS supports the API at all"
+      ],
+      "correctIndex": 1,
+      "explanation": "An actual cannot be replaced: there is exactly one per target, picked by the compiler. If a test would ever want to control the behaviour — return a value, simulate a failure — the abstraction must be an interface. Compile time and layer placement are secondary; substitutability is what decides."
+    },
+    {
+      "id": "kmp-13",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "What is the practical consequence of implementing a persistent store as expect/actual instead of an interface?",
+      "options": [
+        "It stops working in Kotlin/Native",
+        "Any test touching that path pulls in the real platform implementation, so it cannot run on the JVM",
+        "The code becomes slower because of dynamic dispatch",
+        "Nothing — the two approaches are equivalent"
+      ],
+      "correctIndex": 1,
+      "explanation": "An actual is resolved by the compiler, so there is no seam to substitute. A JVM test would need a real SharedPreferences and therefore an emulator or Robolectric. With an interface the same test runs in milliseconds against an in-memory fake, which is exactly why KeyValueStore is a port in this project."
+    },
+    {
+      "id": "kmp-14",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Which of these is the best candidate for expect/actual rather than a port?",
+      "options": [
+        "Reading the saved user session",
+        "Setting the status bar icon tone",
+        "Checking whether the device is online",
+        "Generating a unique identifier"
+      ],
+      "correctIndex": 1,
+      "explanation": "Setting the icon tone is a one-way side effect: no state, no branching, no return value, and on iOS it is a no-op. A fake could only assert that the call happened, which tests the mock. The other three all hold state or make a decision that a test needs to control, so they belong behind an interface."
+    },
+    {
+      "id": "kmp-15",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Why is this a poor use of expect/actual?",
+      "options": [
+        "expect functions cannot return Long",
+        "Time becomes uncontrollable in tests — expiry could only be verified by waiting for it",
+        "It will not compile for Kotlin/Native",
+        "currentTimeMillis is already available in the standard library"
+      ],
+      "correctIndex": 1,
+      "explanation": "The problem is testability, not syntax. With the clock hidden behind an actual, a test cannot pretend that time has passed, so the only way to reach the expired branch is to wait for it. A `fun interface Clock` injected into the validator makes the same logic testable in microseconds. Anything that is a decision, not a raw platform call, belongs behind an interface.",
+      "code": "expect fun currentTimeMillis(): Long\n\nfun isTokenExpired(expiry: Long) = currentTimeMillis() > expiry"
+    },
+    {
+      "id": "kmp-16",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "How does a platform dependency passed as a parameter compare with expect/actual and DI?",
+      "options": [
+        "It is a worse variant of DI, because it exposes an implementation detail",
+        "It keeps the dependency visible in the signature, lets previews use a default and keeps Context out of shared code",
+        "It only works for Compose functions",
+        "It prevents the use of Koin"
+      ],
+      "correctIndex": 1,
+      "explanation": "`App(platformModule: Module = previewPlatformModule())` states the dependency in the signature instead of hiding it in a global. Android passes SharedPreferences, iOS passes NSUserDefaults, and previews fall back to an in-memory default with no configuration. Visibility in a signature is a feature: the reader sees what the function needs."
+    },
+    {
+      "id": "kmp-17",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "A tutorial tells you to call freeze() before sharing state between threads in Kotlin/Native. How should you read that advice today?",
+      "options": [
+        "Correct — freezing is still required for shared state",
+        "Obsolete — the new memory model removed freezing in Kotlin 1.7.20",
+        "Correct, but only for objects captured by coroutines",
+        "Correct only on iOS, not on macOS"
+      ],
+      "correctIndex": 1,
+      "explanation": "The old model required freeze() and threw InvalidMutabilityException on mutation of a frozen object, which made coroutines painful and drove teams away from KMP. Since 1.7.20 state is shared between threads as on the JVM. Advice about freeze(), @ThreadLocal and AtomicReference predates that change — always check the date on KMP material."
+    },
+    {
+      "id": "kmp-18",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Your team shares the domain and data layers but keeps SwiftUI on iOS. How should this be judged?",
+      "options": [
+        "A half-measure — the point of KMP is sharing the UI as well",
+        "A legitimate architecture that captures most of the benefit, since the risky complexity lives in the logic",
+        "Impossible — Compose Multiplatform is required for KMP",
+        "Reasonable only for small apps"
+      ],
+      "correctIndex": 1,
+      "explanation": "The payoff from sharing falls as you move outward: domain and data hold the complexity worth writing once, while the UI is where platform conventions matter most. Keeping native UI is a common and deliberate choice. It does impose one constraint: the shared layers must not depend on Compose, which is exactly why the domain stays plain Kotlin."
+    },
+    {
+      "id": "kmp-19",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "You export a Kotlin sealed interface to iOS. What does a Swift developer actually get?",
+      "options": [
+        "A Swift enum with associated values and exhaustive matching",
+        "A protocol with implementing classes, and switch still needs a default branch",
+        "A struct holding a type discriminator",
+        "Nothing — sealed types are not exported"
+      ],
+      "correctIndex": 1,
+      "explanation": "Interop goes through Objective-C, which has no notion of sealed types, so exhaustiveness is lost and the compiler stops helping. It is a real cost when the shared API models state as a sealed hierarchy. SKIE generates native Swift enums on top, restoring exhaustive matching — worth adopting before hand-writing wrappers."
+    },
+    {
+      "id": "kmp-20",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Why keep the API exported from a shared module narrow?",
+      "options": [
+        "Kotlin/Native limits the number of exported classes",
+        "Every public type lands in the Objective-C header, inflating framework size and compile time, and leaking Kotlin quirks into Swift",
+        "Public declarations are slower to call",
+        "iOS requires an explicit export list"
+      ],
+      "correctIndex": 1,
+      "explanation": "The generated header grows with every public declaration, and each one exposes Kotlin constructs — sealed types, generics, default arguments — in whatever awkward shape Objective-C allows. A narrow facade with the rest marked internal keeps both the framework and the Swift-side experience manageable."
+    },
+    {
+      "id": "kmp-21",
+      "category": "kmp",
+      "difficulty": "senior",
+      "text": "Which claim about KMP is FALSE?",
+      "options": [
+        "Build times grow, because each target compiles separately",
+        "A bug in shared code now reaches both apps at once",
+        "Sharing code removes differences in permissions and background execution",
+        "A JVM-only dependency cannot be used from commonMain"
+      ],
+      "correctIndex": 2,
+      "explanation": "Platform behaviour is not unified by sharing code: permissions, background limits and lifecycles still differ and still need platform handling. The other three are genuine trade-offs — and the shared-bug one is an argument for more tests, not fewer, since a single defect now ships twice."
+    }
+  ]
+}
