@@ -5,6 +5,9 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logger
+import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.Headers
@@ -24,10 +27,14 @@ import pl.prodevcode.learnmobiledev.fakeapi.routes.contentRoutes
  *   on a real connection finds them.
  * @param unavailable consulted per request. A lambda rather than a flag, so the app can
  *   flip the backend into a failing state at runtime and exercise its error paths.
+ * @param logTraffic prints every request and response through the platform logger. Off by
+ *   default: the logger is a platform API, and unit tests run on a JVM where neither
+ *   android.util.Log nor NSLog exists. The app switches it on.
  */
 data class FakeBackendConfig(
     val latencyMillis: Long = 150,
     val unavailable: () -> Boolean = { false },
+    val logTraffic: Boolean = false,
 )
 
 /**
@@ -72,7 +79,17 @@ object FakeBackend {
                 }
             }
             install(DefaultRequest) { url(BASE_URL) }
+            install(Logging) {
+                logger = PlatformLogger
+                level = if (config.logTraffic) LogLevel.ALL else LogLevel.NONE
+            }
         }
+    }
+}
+
+private object PlatformLogger : Logger {
+    override fun log(message: String) {
+        logHttp(message)
     }
 }
 

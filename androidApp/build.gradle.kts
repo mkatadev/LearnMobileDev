@@ -17,6 +17,12 @@ dependencies {
 
     implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)
+
+    // Ktor's JVM internals bind to SLF4J, and Android ships no provider — SLF4J then
+    // prints three "No SLF4J providers were found" warnings to System.err on first use.
+    // The app's HTTP logging goes through Ktor's own Logger, so nothing is lost by
+    // binding the API to a no-op implementation; it only silences the startup noise.
+    runtimeOnly(libs.slf4j.nop)
 }
 
 android {

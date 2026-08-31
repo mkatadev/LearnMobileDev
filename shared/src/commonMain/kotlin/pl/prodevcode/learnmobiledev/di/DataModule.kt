@@ -26,6 +26,7 @@ import pl.prodevcode.learnmobiledev.domain.repository.ScenarioRepository
 import pl.prodevcode.learnmobiledev.domain.repository.ThemePreferences
 import pl.prodevcode.learnmobiledev.domain.repository.UserRepository
 import pl.prodevcode.learnmobiledev.fakeapi.FakeBackend
+import pl.prodevcode.learnmobiledev.fakeapi.FakeBackendConfig
 import pl.prodevcode.learnmobiledev.fakeapi.LanguageCatalog
 
 /**
@@ -54,6 +55,9 @@ val dataModule: Module = module {
                 supported = AppLanguage.SUPPORTED_TAGS,
                 default = AppLanguage.DEFAULT.tag,
             ),
+            // Every exchange with the content service shows up in Logcat and Console.app,
+            // which is the whole point of a fake that speaks real HTTP.
+            config = FakeBackendConfig(logTraffic = true),
         )
     }
     single { ContentApi(get(), get()) }
