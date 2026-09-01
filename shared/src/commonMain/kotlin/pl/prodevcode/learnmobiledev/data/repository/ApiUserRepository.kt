@@ -49,6 +49,32 @@ class ApiUserRepository(
     }
 
     /**
+     * A create has no id yet, so [toDomain] cannot key its meaning on one. It is mapped
+     * here instead: `422` is the server refusing these values, anything else is the
+     * endpoint being unusable.
+     */
+    override suspend fun createUser(name: String, email: String, role: String): User = try {
+        api.createUser(name, email, role)
+    } catch (failure: UsersApiException) {
+        throw when (failure.status) {
+            HttpStatusCode.UnprocessableEntity.value -> UserSyncException.InvalidUser(NEW_USER)
+            else -> UserSyncException.NetworkUnavailable()
+        }
+    }
+
+    override suspend fun deleteUser(userId: String): Unit = try {
+        api.deleteUser(userId)
+    } catch (failure: UsersApiException) {
+        throw failure.toDomain(userId)
+    }
+
+    override suspend fun getRoles(): List<String> = try {
+        api.getRoles()
+    } catch (failure: UsersApiException) {
+        throw failure.toDomain(userId = null)
+    }
+
+    /**
      * The status code decides the domain meaning: `409` is the server refusing this
      * particular write, `422` is it refusing these values, `404` is a row that is no longer
      * there, and anything else is the endpoint being unusable. Reading the message instead
@@ -60,5 +86,10 @@ class ApiUserRepository(
         status == HttpStatusCode.UnprocessableEntity.value -> UserSyncException.InvalidUser(userId)
         status == HttpStatusCode.NotFound.value -> UserSyncException.UserNotFound(userId)
         else -> UserSyncException.NetworkUnavailable()
+    }
+
+    private companion object {
+        /** A user being created has no id yet, but the failure still needs naming for logs. */
+        const val NEW_USER = "new"
     }
 }

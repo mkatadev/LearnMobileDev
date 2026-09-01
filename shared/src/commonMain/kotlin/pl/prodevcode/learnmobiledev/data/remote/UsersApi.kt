@@ -1,10 +1,11 @@
 package pl.prodevcode.learnmobiledev.data.remote
 
 import io.ktor.client.HttpClient
-import io.ktor.client.request.get
+import io.ktor.client.plugins.resources.delete
+import io.ktor.client.plugins.resources.get
+import io.ktor.client.plugins.resources.post
+import io.ktor.client.plugins.resources.put
 import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -14,6 +15,7 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 import pl.prodevcode.learnmobiledev.data.user.FavoriteRequestDto
 import pl.prodevcode.learnmobiledev.data.user.FavoriteResponseDto
+import pl.prodevcode.learnmobiledev.data.user.RolesResponseDto
 import pl.prodevcode.learnmobiledev.data.user.UserDto
 import pl.prodevcode.learnmobiledev.data.user.UserEditDto
 import pl.prodevcode.learnmobiledev.data.user.UsersResponseDto
@@ -43,22 +45,48 @@ class UsersApi(
 ) {
 
     suspend fun getUsers(query: String, simulateFailure: Boolean = false): List<User> {
-        val response = client.get(USERS_PATH) {
-            parameter("q", query)
+        val response = client.get(ApiRoutes.V1.Users(q = query)) {
             if (simulateFailure) header(FakeBackend.FAULT_HEADER, FakeBackend.FAULT_UNAVAILABLE)
         }
-        val body = response.requireSuccess("GET $USERS_PATH")
+        val body = response.requireSuccess("GET users")
         return json.decodeFromString<UsersResponseDto>(body).users.map { it.toDomain() }
     }
 
     /** Returns the value the server actually persisted, which need not be the one asked for. */
     suspend fun setFavorite(userId: String, favorite: Boolean): Boolean {
-        val response = client.put("$USERS_PATH/$userId/favorite") {
+        val response = client.put(userId.favoriteRoute()) {
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(FavoriteRequestDto(favorite)))
         }
-        val body = response.requireSuccess("PUT $USERS_PATH/$userId/favorite")
+        val body = response.requireSuccess("PUT favorite")
         return json.decodeFromString<FavoriteResponseDto>(body).favorite
+    }
+
+    /** The roles the service will accept, so the app can offer exactly those and no others. */
+    suspend fun getRoles(): List<String> {
+        val body = client.get(ApiRoutes.V1.Roles()).requireSuccess("GET roles")
+        return json.decodeFromString<RolesResponseDto>(body).roles
+    }
+
+    /**
+     * Creates a user and returns the stored row.
+     *
+     * `POST` rather than `PUT`, because the server assigns the id: the client cannot name
+     * the resource it is asking for, and repeating the call creates a second row. That is
+     * exactly why a create must not be retried blindly the way a favorite may be.
+     */
+    suspend fun createUser(name: String, email: String, role: String): User {
+        val response = client.post(ApiRoutes.V1.Users()) {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(UserEditDto(name, email, role)))
+        }
+        val body = response.requireSuccess("POST users")
+        return json.decodeFromString<UserDto>(body).toDomain()
+    }
+
+    /** Answers `204` with no body, so there is nothing to decode — only a status to check. */
+    suspend fun deleteUser(userId: String) {
+        client.delete(userId.userRoute()).requireSuccess("DELETE user")
     }
 
     /**
@@ -68,13 +96,17 @@ class UsersApi(
      * what the server has — including any normalization it applied on the way in.
      */
     suspend fun updateUser(userId: String, name: String, email: String, role: String): User {
-        val response = client.put("$USERS_PATH/$userId") {
+        val response = client.put(userId.userRoute()) {
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(UserEditDto(name, email, role)))
         }
-        val body = response.requireSuccess("PUT $USERS_PATH/$userId")
+        val body = response.requireSuccess("PUT user")
         return json.decodeFromString<UserDto>(body).toDomain()
     }
+
+    private fun String.userRoute() = ApiRoutes.V1.Users.Detail(id = this)
+
+    private fun String.favoriteRoute() = ApiRoutes.V1.Users.Detail.Favorite(userRoute())
 
     private suspend fun HttpResponse.requireSuccess(call: String): String {
         if (!status.isSuccess()) {
@@ -83,7 +115,4 @@ class UsersApi(
         return bodyAsText()
     }
 
-    private companion object {
-        const val USERS_PATH = "/api/v1/users"
-    }
 }

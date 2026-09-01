@@ -56,6 +56,20 @@ class RoutingBuilder internal constructor() {
     fun put(template: String, handler: suspend (ApiCall) -> ApiResponse) {
         routes += Route("PUT", template, handler)
     }
+
+    /**
+     * `POST` for creation, because the server assigns the id: the client cannot name the
+     * resource it is asking for, and sending the same call twice creates two rows. That is
+     * precisely the difference from [put], and the reason a create must not be retried
+     * blindly.
+     */
+    fun post(template: String, handler: suspend (ApiCall) -> ApiResponse) {
+        routes += Route("POST", template, handler)
+    }
+
+    fun delete(template: String, handler: suspend (ApiCall) -> ApiResponse) {
+        routes += Route("DELETE", template, handler)
+    }
 }
 
 /**

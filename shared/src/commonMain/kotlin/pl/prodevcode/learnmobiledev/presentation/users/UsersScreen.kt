@@ -2,6 +2,7 @@ package pl.prodevcode.learnmobiledev.presentation.users
 
 import pl.prodevcode.learnmobiledev.core.ui.localized
 import pl.prodevcode.learnmobiledev.core.ui.AppString
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +18,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -43,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -96,6 +104,22 @@ fun UsersScreen(
             snackbarHostState.showSnackbar(text)
             pendingMessage = null
         }
+    }
+
+    state.pendingDeletion?.let { user ->
+        DeleteConfirmationDialog(
+            user = user,
+            onConfirm = { viewModel.dispatch(UsersIntent.Ui.DeleteConfirmed) },
+            onDismiss = { viewModel.dispatch(UsersIntent.Ui.DeleteDismissed) },
+        )
+    }
+
+    state.creator?.let { creator ->
+        CreateUserDialog(
+            creator = creator,
+            roles = state.roles,
+            onIntent = viewModel::dispatch,
+        )
     }
 
     Scaffold(
@@ -162,6 +186,10 @@ private fun Header(state: UsersState, onIntent: (UsersIntent) -> Unit) {
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         )
+        // The switch and the actions are separate rows on purpose. Side by side they fit in
+        // English and collide in Polish, and the refresh label grows further while a load
+        // is running — a row whose contents must all fit is a row that breaks in the next
+        // translation.
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
@@ -175,12 +203,27 @@ private fun Header(state: UsersState, onIntent: (UsersIntent) -> Unit) {
                 text = localized(AppString.UsersSimulateError),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Spacer(Modifier.weight(1f))
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(top = Spacing.small),
+        ) {
+            // Disabled until the catalogue arrives: the form offers a closed list of roles,
+            // and opening it empty would present a choice with nothing to choose.
+            Button(
+                onClick = { onIntent(UsersIntent.Ui.AddClicked) },
+                enabled = state.roles.isNotEmpty(),
+            ) {
+                Text(localized(AppString.UsersAdd), maxLines = 1)
+            }
+            Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = { onIntent(UsersIntent.Ui.RefreshClicked) }) {
                 Text(
-                    localized(
+                    text = localized(
                         if (state.isRefreshing) AppString.UsersRefreshing else AppString.UsersRefresh,
                     ),
+                    maxLines = 1,
                 )
             }
         }
@@ -197,13 +240,90 @@ private fun UsersList(state: UsersState, onIntent: (UsersIntent) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(Spacing.itemSpacing),
     ) {
         items(items = state.users, key = { it.id }) { user ->
-            UserRow(
+            SwipeToDeleteRow(
                 user = user,
                 isSaving = user.id in state.savingFavorites,
+                isDeleting = user.id in state.deleting,
                 onClick = { onIntent(UsersIntent.Ui.UserClicked(user.id)) },
                 onFavoriteClick = { onIntent(UsersIntent.Ui.FavoriteToggled(user.id)) },
+                onDelete = { onIntent(UsersIntent.Ui.DeleteClicked(user.id)) },
             )
         }
+    }
+}
+
+/**
+ * A row that is swiped away to delete it.
+ *
+ * The gesture only *asks*: it dispatches `DeleteClicked`, which opens the confirmation
+ * dialog, and the row snaps back. A swipe is easy to perform by accident while scrolling,
+ * and deleting a person on a gesture alone is not something to leave undoable.
+ *
+ * That is also why the state is reset rather than confirmed: `SwipeToDismissBox` would
+ * otherwise leave the row parked off-screen while the dialog decides its fate, and a
+ * cancelled dialog would leave a gap where a user still is. The row leaves the list only
+ * when the server has agreed, through `DeleteSucceeded`.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeToDeleteRow(
+    user: User,
+    isSaving: Boolean,
+    isDeleting: Boolean,
+    onClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            // Ignore the gesture entirely while the server is already removing this row.
+            if (value != SwipeToDismissBoxValue.Settled && !isDeleting) onDelete()
+            // Never "accept" the dismissal: the dialog owns the outcome, not the gesture.
+            false
+        },
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            SwipeDeleteBackground(visible = dismissState.targetValue != SwipeToDismissBoxValue.Settled)
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        UserRow(
+            user = user,
+            isSaving = isSaving,
+            isDeleting = isDeleting,
+            onClick = onClick,
+            onFavoriteClick = onFavoriteClick,
+        )
+    }
+}
+
+/**
+ * What shows behind the row while it is being swiped: the action the gesture will ask for.
+ *
+ * Drawn only while a swipe is actually in progress, and clipped to the card's shape. The
+ * background otherwise sits behind every row permanently, and since the card's corners are
+ * rounded while the box's are not, it shows as a red outline around rows nobody is touching.
+ */
+@Composable
+private fun SwipeDeleteBackground(visible: Boolean) {
+    if (!visible) return
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(CardDefaults.shape)
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = Spacing.cardPadding),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Text(
+            text = localized(AppString.UsersDelete),
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            style = MaterialTheme.typography.titleSmall,
+        )
     }
 }
 
@@ -211,6 +331,7 @@ private fun UsersList(state: UsersState, onIntent: (UsersIntent) -> Unit) {
 private fun UserRow(
     user: User,
     isSaving: Boolean,
+    isDeleting: Boolean,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
@@ -226,19 +347,118 @@ private fun UserRow(
                 Text(user.name, style = MaterialTheme.typography.titleMedium)
                 Text(user.role, style = MaterialTheme.typography.bodySmall)
             }
-            TextButton(onClick = onFavoriteClick) {
+            // While the delete is in flight the row says so instead of offering a star it
+            // is about to stop having anywhere to put.
+            if (isDeleting) {
                 Text(
-                    text = localized(
-                        when {
-                            isSaving -> AppString.UsersFavoriteSaving
-                            user.isFavorite -> AppString.UsersFavoriteYes
-                            else -> AppString.UsersFavoriteNo
-                        },
-                    ),
+                    text = localized(AppString.UserDeleting),
+                    style = MaterialTheme.typography.bodySmall,
                 )
+            } else {
+                TextButton(onClick = onFavoriteClick) {
+                    Text(
+                        text = localized(
+                            when {
+                                isSaving -> AppString.UsersFavoriteSaving
+                                user.isFavorite -> AppString.UsersFavoriteYes
+                                else -> AppString.UsersFavoriteNo
+                            },
+                        ),
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * Confirmation for a destructive action.
+ *
+ * Driven by state rather than by a `remember`, so it survives a rotation: a dialog that
+ * closes itself mid-decision leaves the user unsure whether the row was deleted.
+ */
+@Composable
+private fun DeleteConfirmationDialog(
+    user: User,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(localized(AppString.UserDeleteConfirmTitle)) },
+        text = { Text(localized(AppString.UserDeleteConfirmMessage, user.name)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(localized(AppString.UsersDelete)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(localized(AppString.ActionCancel)) }
+        },
+    )
+}
+
+/**
+ * The create form, as a dialog over the list.
+ *
+ * Every field is state in the store and every keystroke an intent, exactly like the edit
+ * form — the two differ in where they send the result, not in how they are built. The role
+ * is a picker rather than a text field, so a user cannot invent one the server will refuse.
+ */
+@Composable
+private fun CreateUserDialog(
+    creator: UserEditor,
+    roles: List<String>,
+    onIntent: (UsersIntent) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { onIntent(UsersIntent.Ui.CreateCancelled) },
+        title = { Text(localized(AppString.UserCreateTitle)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.itemSpacing)) {
+                OutlinedTextField(
+                    value = creator.name,
+                    onValueChange = { onIntent(UsersIntent.Ui.CreateNameChanged(it)) },
+                    label = { Text(localized(AppString.UserEditName)) },
+                    singleLine = true,
+                    enabled = !creator.isSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = creator.email,
+                    onValueChange = { onIntent(UsersIntent.Ui.CreateEmailChanged(it)) },
+                    label = { Text(localized(AppString.UserEditEmail)) },
+                    singleLine = true,
+                    enabled = !creator.isSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                RolePicker(
+                    selected = creator.role,
+                    roles = roles,
+                    enabled = !creator.isSaving,
+                    onRoleSelected = { onIntent(UsersIntent.Ui.CreateRoleChanged(it)) },
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onIntent(UsersIntent.Ui.CreateSubmitted) },
+                enabled = creator.canSave,
+            ) {
+                Text(
+                    localized(
+                        if (creator.isSaving) AppString.UserCreating else AppString.UsersAdd,
+                    ),
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = { onIntent(UsersIntent.Ui.CreateCancelled) },
+                enabled = !creator.isSaving,
+            ) {
+                Text(localized(AppString.ActionCancel))
+            }
+        },
+    )
 }
 
 @Composable

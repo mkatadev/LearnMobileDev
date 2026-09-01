@@ -9,9 +9,11 @@ import pl.prodevcode.learnmobiledev.data.remote.ApiLessonsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiQuestionsSource
 import pl.prodevcode.learnmobiledev.data.remote.ApiScenariosSource
 import pl.prodevcode.learnmobiledev.data.remote.ContentApi
+import pl.prodevcode.learnmobiledev.data.remote.InfographicsApi
 import pl.prodevcode.learnmobiledev.data.remote.UsersApi
 import pl.prodevcode.learnmobiledev.data.remote.createContentHttpClient
 import pl.prodevcode.learnmobiledev.data.preferences.KeyValueThemePreferences
+import pl.prodevcode.learnmobiledev.data.repository.ApiInfographicRepository
 import pl.prodevcode.learnmobiledev.data.repository.ApiUserRepository
 import pl.prodevcode.learnmobiledev.data.repository.LessonJsonRepository
 import pl.prodevcode.learnmobiledev.data.repository.QuestionJsonRepository
@@ -19,6 +21,7 @@ import pl.prodevcode.learnmobiledev.data.repository.ScenarioJsonRepository
 import pl.prodevcode.learnmobiledev.domain.model.AppLanguage
 import pl.prodevcode.learnmobiledev.domain.repository.ConcurrencyLab
 import pl.prodevcode.learnmobiledev.domain.repository.LanguagePreferences
+import pl.prodevcode.learnmobiledev.domain.repository.InfographicRepository
 import pl.prodevcode.learnmobiledev.domain.repository.LanguageProvider
 import pl.prodevcode.learnmobiledev.domain.repository.PlatformLocale
 import pl.prodevcode.learnmobiledev.domain.repository.LessonRepository
@@ -75,6 +78,10 @@ val dataModule: Module = module {
     // an error locally.
     single { UsersApi(get()) }
     single { ApiUserRepository(get()) } bind UserRepository::class
+    // The infographic service, over the same client: pictures are the backend's data too,
+    // so the app reaches them through HTTP rather than bundling a copy of its own.
+    single { InfographicsApi(get()) }
+    single { ApiInfographicRepository(get()) } bind InfographicRepository::class
     single<NetworkFailureSwitch> { get<ApiUserRepository>() }
     single {
         LessonJsonRepository(ApiLessonsSource(get()), get())

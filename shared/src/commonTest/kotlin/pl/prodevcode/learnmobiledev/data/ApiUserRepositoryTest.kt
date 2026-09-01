@@ -13,6 +13,8 @@ import pl.prodevcode.learnmobiledev.domain.repository.UserSyncException
 import pl.prodevcode.learnmobiledev.fakeapi.FakeBackend
 import pl.prodevcode.learnmobiledev.fakeapi.FakeBackendConfig
 import pl.prodevcode.learnmobiledev.fakeapi.LanguageCatalog
+import pl.prodevcode.learnmobiledev.fakeapi.RoleCatalog
+import pl.prodevcode.learnmobiledev.fakeapi.RoleStorage
 import pl.prodevcode.learnmobiledev.fakeapi.UserDirectory
 import pl.prodevcode.learnmobiledev.fakeapi.UserStorage
 import pl.prodevcode.learnmobiledev.fakeapi.routes.REJECTED_FAVORITE_USER_ID
@@ -36,6 +38,13 @@ class ApiUserRepositoryTest {
         }
     """.trimIndent()
 
+    /**
+     * The roles are a fixture too: the bundled catalogue needs an Android runtime a JVM
+     * test does not have, and an empty catalogue would make the server refuse every write
+     * for holding a role it does not publish.
+     */
+    private val roles = """{"roles":["Android Developer","iOS Developer","QA Engineer","Tech Lead"]}"""
+
     private fun repository(): ApiUserRepository {
         val client = createContentHttpClient(
             engine = FakeBackend.createEngine(
@@ -43,6 +52,7 @@ class ApiUserRepositoryTest {
                 // No artificial latency: this test asserts wiring, not loading states.
                 config = FakeBackendConfig(latencyMillis = 0),
                 users = UserDirectory(UserStorage { seed }),
+                roles = RoleCatalog(RoleStorage { roles }),
             ),
             baseUrl = FakeBackend.BASE_URL,
         )
@@ -115,5 +125,47 @@ class ApiUserRepositoryTest {
 
         repository.failNextLoad = false
         assertTrue(repository.getUsers("").isNotEmpty())
+    }
+
+    @Test
+    fun `the role catalogue travels over http`() = runTest {
+        val roles = repository().getRoles()
+
+        assertTrue(roles.contains("Tech Lead"), "expected the published roles, got $roles")
+    }
+
+    @Test
+    fun `a created user is assigned an id and appears in the directory`() = runTest {
+        val repository = repository()
+
+        val created = repository.createUser("Nina Fresh", "nina@example.com", "Tech Lead")
+
+        assertTrue(created.id.isNotBlank(), "the server must assign an id")
+        assertTrue(repository.getUsers("").any { it.id == created.id })
+    }
+
+    /** A role the service does not publish is refused, whatever the app thought. */
+    @Test
+    fun `a role outside the catalogue surfaces as an invalid user`() = runTest {
+        assertFailsWith<UserSyncException.InvalidUser> {
+            repository().createUser("Nina", "nina@example.com", "Astronaut")
+        }
+    }
+
+    @Test
+    fun `a deleted user is gone from the directory`() = runTest {
+        val repository = repository()
+
+        repository.deleteUser("u-1")
+
+        assertTrue(repository.getUsers("").none { it.id == "u-1" })
+    }
+
+    @Test
+    fun `deleting a user that is gone reports it as missing`() = runTest {
+        val repository = repository()
+        repository.deleteUser("u-1")
+
+        assertFailsWith<UserSyncException.UserNotFound> { repository.deleteUser("u-1") }
     }
 }

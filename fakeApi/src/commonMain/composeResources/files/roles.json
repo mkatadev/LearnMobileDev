@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "roles": [
+    "Android Developer",
+    "iOS Developer",
+    "Backend Developer",
+    "Frontend Developer",
+    "Tech Lead",
+    "QA Engineer",
+    "Product Owner",
+    "UX Designer",
+    "Data Engineer",
+    "DevOps Engineer"
+  ]
+}

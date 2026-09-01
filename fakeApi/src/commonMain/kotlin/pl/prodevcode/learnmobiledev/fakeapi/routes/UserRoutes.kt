@@ -2,8 +2,10 @@ package pl.prodevcode.learnmobiledev.fakeapi.routes
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import pl.prodevcode.learnmobiledev.fakeapi.RoleCatalog
 import pl.prodevcode.learnmobiledev.fakeapi.UserDirectory
 import pl.prodevcode.learnmobiledev.fakeapi.UserRecord
+import pl.prodevcode.learnmobiledev.fakeapi.http.ApiRequest
 import pl.prodevcode.learnmobiledev.fakeapi.http.ApiResponse
 import pl.prodevcode.learnmobiledev.fakeapi.http.RoutingBuilder
 
@@ -12,6 +14,8 @@ const val USERS_PATH = "/api/v1/users"
 const val USER_PATH = "$USERS_PATH/{id}"
 
 const val USER_FAVORITE_PATH = "$USERS_PATH/{id}/favorite"
+
+const val ROLES_PATH = "/api/v1/roles"
 
 /**
  * The one user the service always refuses to bookmark.
@@ -24,6 +28,9 @@ const val REJECTED_FAVORITE_USER_ID = "u-4"
 
 @Serializable
 private data class UsersResponse(val users: List<UserRecord>)
+
+@Serializable
+private data class RolesResponse(val roles: List<String>)
 
 @Serializable
 private data class UserEditRequest(
@@ -51,23 +58,47 @@ private val json = Json {
  * The user service.
  *
  * - `GET /api/v1/users?q=` — the directory, filtered server-side.
+ * - `POST /api/v1/users` — creates a row and assigns it an id.
  * - `PUT /api/v1/users/{id}` — replaces the editable fields, after validating them.
+ * - `DELETE /api/v1/users/{id}` — removes a row.
  * - `PUT /api/v1/users/{id}/favorite` — persists the flag, or refuses it.
+ * - `GET /api/v1/roles` — the roles a user is allowed to hold.
  *
  * Searching is a query parameter and not something the client does to a full download:
  * a directory that fits in memory today will not tomorrow, and an app written against
  * "fetch everything and filter locally" has to be rewritten when that happens.
  */
-internal fun RoutingBuilder.userRoutes(directory: UserDirectory) {
+internal fun RoutingBuilder.userRoutes(directory: UserDirectory, roles: RoleCatalog) {
     get(USERS_PATH) { call ->
         val users = directory.search(call.request.query["q"].orEmpty())
         ApiResponse.ok(json.encodeToString(UsersResponse(users)))
     }
 
+    // The app renders these as a closed list, so it cannot offer a role the server would
+    // then refuse. Publishing them is what lets the two agree without the app shipping a
+    // copy that goes stale the moment a role is added here.
+    get(ROLES_PATH) {
+        ApiResponse.ok(json.encodeToString(RolesResponse(roles.all())))
+    }
+
+    post(USERS_PATH) { call ->
+        val new = call.request.decodeEdit()
+            ?: return@post ApiResponse.badRequest("expected a JSON body with name, email and role")
+
+        val name = new.name.trim()
+        val email = new.email.trim()
+        val role = new.role.trim()
+
+        validate(name, email, role, roles)?.let { return@post it }
+
+        // `201` with the stored row, because the client cannot know the id it has just
+        // caused to exist. Answering with an empty body would leave it guessing.
+        ApiResponse.created(json.encodeToString(directory.create(name, email, role)))
+    }
+
     put(USER_PATH) { call ->
         val id = call.pathParameters.getValue("id")
-        val edit = runCatching { json.decodeFromString<UserEditRequest>(call.request.body) }
-            .getOrNull()
+        val edit = call.request.decodeEdit()
             ?: return@put ApiResponse.badRequest("expected a JSON body with name, email and role")
 
         val name = edit.name.trim()
@@ -76,12 +107,24 @@ internal fun RoutingBuilder.userRoutes(directory: UserDirectory) {
 
         // Validation is the server's job. A client is free to check the same rules for a
         // faster message, but it is not the one that gets to decide what may be stored.
-        validate(name, email, role)?.let { return@put it }
+        validate(name, email, role, roles)?.let { return@put it }
 
         val updated = directory.update(id, name, email, role)
             ?: return@put ApiResponse.notFound("unknown user '$id'")
 
         ApiResponse.ok(json.encodeToString(updated))
+    }
+
+    delete(USER_PATH) { call ->
+        val id = call.pathParameters.getValue("id")
+
+        // `404` rather than a silent success: the client asked to remove something that was
+        // not there, and saying so is what lets it reload a list it evidently disagrees
+        // with the server about.
+        if (!directory.delete(id)) {
+            return@delete ApiResponse.notFound("unknown user '$id'")
+        }
+        ApiResponse.noContent()
     }
 
     put(USER_FAVORITE_PATH) { call ->
@@ -101,14 +144,26 @@ internal fun RoutingBuilder.userRoutes(directory: UserDirectory) {
     }
 }
 
+/** Creating and editing take the same body, so they parse it the same way. */
+private fun ApiRequest.decodeEdit(): UserEditRequest? =
+    runCatching { json.decodeFromString<UserEditRequest>(body) }.getOrNull()
+
 /**
  * `422` rather than `400`: the request was well-formed JSON, the server simply will not
  * accept these values. The distinction matters to the client, which shows a field error
  * for one and a generic failure for the other.
  */
-private fun validate(name: String, email: String, role: String): ApiResponse? = when {
+private suspend fun validate(
+    name: String,
+    email: String,
+    role: String,
+    roles: RoleCatalog,
+): ApiResponse? = when {
     name.isBlank() -> ApiResponse.unprocessable("'name' must not be blank")
     role.isBlank() -> ApiResponse.unprocessable("'role' must not be blank")
+    // The published list is the whole list. Accepting anything else would turn the choice
+    // the app offers into a suggestion rather than a contract.
+    !roles.contains(role) -> ApiResponse.unprocessable("'$role' is not a role this service offers")
     !email.isValidEmail() -> ApiResponse.unprocessable("'$email' is not a valid email address")
     else -> null
 }

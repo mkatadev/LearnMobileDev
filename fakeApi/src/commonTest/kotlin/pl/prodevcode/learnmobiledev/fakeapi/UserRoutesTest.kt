@@ -2,8 +2,10 @@ package pl.prodevcode.learnmobiledev.fakeapi
 
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
@@ -37,11 +39,19 @@ class UserRoutesTest {
 
     private val languages = LanguageCatalog(supported = setOf("en"), default = "en")
 
+    /**
+     * The roles are a fixture too. Without one the catalogue would be read from the
+     * bundled resource, which needs an Android runtime a JVM test does not have — every
+     * write would then be refused for holding a role the service does not know.
+     */
+    private val roles = """{"roles":["Android Developer","iOS Developer","QA Engineer","Tech Lead"]}"""
+
     private fun client() = HttpClient(
         FakeBackend.createEngine(
             languages = languages,
             config = FakeBackendConfig(latencyMillis = 0),
             users = UserDirectory(UserStorage { seed }),
+            roles = RoleCatalog(RoleStorage { roles }),
         ),
     ) {
         install(DefaultRequest) { url(FakeBackend.BASE_URL) }
@@ -183,5 +193,115 @@ class UserRoutesTest {
         assertEquals(503, failed.status.value)
 
         assertEquals(200, client.get("/api/v1/users").status.value)
+    }
+
+    @Test
+    fun `the roles the service accepts are published`() = runTest {
+        val response = client().get("/api/v1/roles")
+
+        assertEquals(200, response.status.value)
+        assertTrue(response.bodyAsText().contains("Tech Lead"))
+    }
+
+    /** `201` and the stored row: the client cannot know the id it has just created. */
+    @Test
+    fun `creating a user assigns an id and returns the row`() = runTest {
+        val client = client()
+
+        val created = client.post("/api/v1/users") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"Nina Fresh","email":"nina@example.com","role":"Tech Lead"}""")
+        }
+
+        assertEquals(201, created.status.value)
+        assertTrue(created.bodyAsText().contains("\"id\""), "the created row must carry its id")
+        assertTrue(client.get("/api/v1/users").bodyAsText().contains("Nina Fresh"))
+    }
+
+    /** An id the seed already uses must never be handed to a new row. */
+    @Test
+    fun `a created user does not collide with the seed`() = runTest {
+        val client = client()
+
+        repeat(3) { index ->
+            client.post("/api/v1/users") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"name":"New $index","email":"new$index@example.com","role":"Tech Lead"}""")
+            }
+        }
+
+        val ids = Regex("\"id\":\"([^\"]+)\"")
+            .findAll(client.get("/api/v1/users").bodyAsText())
+            .map { it.groupValues[1] }
+            .toList()
+
+        assertEquals(ids.size, ids.toSet().size, "duplicate ids: $ids")
+    }
+
+    @Test
+    fun `creating a user validates the same way editing does`() = runTest {
+        val client = client()
+        val rejected = listOf(
+            """{"name":"  ","email":"nina@example.com","role":"Tech Lead"}""",
+            """{"name":"Nina","email":"not-an-email","role":"Tech Lead"}""",
+            """{"name":"Nina","email":"nina@example.com","role":"Astronaut"}""",
+        )
+
+        rejected.forEach { body ->
+            val response = client.post("/api/v1/users") {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+
+            assertEquals(422, response.status.value, "expected 422 for $body")
+        }
+    }
+
+    /** A role outside the published list is not a role, however well-formed the request. */
+    @Test
+    fun `a role the service does not offer is refused`() = runTest {
+        val response = client().put("/api/v1/users/u-1") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"Anna","email":"anna@example.com","role":"Astronaut"}""")
+        }
+
+        assertEquals(422, response.status.value)
+    }
+
+    @Test
+    fun `deleting a user removes it from the directory`() = runTest {
+        val client = client()
+
+        val deleted = client.delete("/api/v1/users/u-1")
+
+        assertEquals(204, deleted.status.value)
+        assertFalse(client.get("/api/v1/users").bodyAsText().contains("\"u-1\""))
+    }
+
+    /** Saying `404` is what lets a client reload a list it disagrees with the server about. */
+    @Test
+    fun `deleting a user that is gone reports it`() = runTest {
+        val client = client()
+        client.delete("/api/v1/users/u-1")
+
+        assertEquals(404, client.delete("/api/v1/users/u-1").status.value)
+    }
+
+    /** An id is never recycled, so a new row cannot inherit a deleted user's favorite. */
+    @Test
+    fun `a deleted user does not leave its favorite behind`() = runTest {
+        val client = client()
+        client.put("/api/v1/users/u-1/favorite") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"favorite":true}""")
+        }
+        client.delete("/api/v1/users/u-1")
+
+        val created = client.post("/api/v1/users") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"Nina Fresh","email":"nina@example.com","role":"Tech Lead"}""")
+        }
+
+        assertTrue(created.bodyAsText().contains("\"isFavorite\":false"))
     }
 }

@@ -24,6 +24,26 @@ interface UserRepository {
      * up showing something no server ever agreed to.
      */
     suspend fun updateUser(userId: String, name: String, email: String, role: String): User
+
+    /**
+     * Creates a user and returns the stored row, id included.
+     *
+     * Takes no id, because the server assigns it. That is also why this is not idempotent
+     * the way [updateUser] is: calling it twice creates two people.
+     */
+    suspend fun createUser(name: String, email: String, role: String): User
+
+    /** Removes a user. Throws [UserSyncException.UserNotFound] if there was none. */
+    suspend fun deleteUser(userId: String)
+
+    /**
+     * The roles a user may hold, as published by the service.
+     *
+     * A port rather than an enum in the domain: which roles are legal is the backend's to
+     * decide, and an app carrying its own copy would offer values the server rejects and
+     * need a new release whenever one was added.
+     */
+    suspend fun getRoles(): List<String>
 }
 
 /**

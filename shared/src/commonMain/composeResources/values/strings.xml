@@ -144,4 +144,22 @@
     <string name="users_timeline_initial">INITIAL STATE</string>
     <string name="users_timeline_title">Intent timeline (%1$d)</string>
     <string name="users_title">MVI: Users</string>
+    <string name="user_create_title">Add user</string>
+    <string name="user_created">User added</string>
+    <string name="user_creating">Adding…</string>
+    <string name="user_deleted">User deleted</string>
+    <string name="user_delete_confirm_title">Delete user?</string>
+    <string name="user_delete_confirm_message">%1$s will be removed permanently.</string>
+    <string name="user_deleting">Deleting…</string>
+    <string name="users_add">Add</string>
+    <string name="users_delete">Delete</string>
+    <string name="user_role_picker_title">Role</string>
+    <string name="action_close">Close</string>
+    <string name="error_infographics_unavailable">Could not load the infographics.</string>
+    <string name="infographics_empty">No infographics published yet.</string>
+    <string name="infographics_subtitle">Visual summaries served by the content API</string>
+    <string name="infographics_title">Infographics</string>
+    <string name="infographics_zoom_hint">Tap to open • pinch to zoom</string>
+    <string name="tab_info">Info</string>
+    <string name="tab_info_icon">▦</string>
 </resources>

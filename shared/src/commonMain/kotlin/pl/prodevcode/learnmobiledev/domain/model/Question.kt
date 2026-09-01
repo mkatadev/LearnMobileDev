@@ -1,5 +1,7 @@
 package pl.prodevcode.learnmobiledev.domain.model
 
+import kotlin.random.Random
+
 /**
  * Knowledge area of a quiz question.
  *
@@ -47,4 +49,21 @@ data class Question(
 ) {
     val correctAnswer: String
         get() = options[correctIndex]
+
+    /**
+     * Returns the same question with its options permuted and [correctIndex] moved along
+     * with the answer it points at.
+     *
+     * The bank is authored by hand, so the correct option tends to drift towards one
+     * position; without this, a session could be passed by always picking the same slot.
+     * Everything downstream addresses options by index, so permuting here is invisible to
+     * the presentation layer.
+     */
+    fun withShuffledOptions(random: Random): Question {
+        val permutation = options.indices.shuffled(random)
+        return copy(
+            options = permutation.map { options[it] },
+            correctIndex = permutation.indexOf(correctIndex),
+        )
+    }
 }

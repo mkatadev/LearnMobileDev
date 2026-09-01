@@ -27,6 +27,9 @@ import pl.prodevcode.learnmobiledev.domain.model.User
 import pl.prodevcode.learnmobiledev.domain.repository.NetworkFailureSwitch
 import pl.prodevcode.learnmobiledev.domain.repository.UserRepository
 import pl.prodevcode.learnmobiledev.domain.repository.UserSyncException
+import pl.prodevcode.learnmobiledev.domain.usecase.CreateUserUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.DeleteUserUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.GetRolesUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetFavoriteUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.UpdateUserUseCase
@@ -44,15 +47,37 @@ class UsersViewModelTest {
         override var failNextLoad: Boolean = false
         var favoriteShouldFail: Boolean = false
         var editShouldFail: Boolean = false
+        var createShouldFail: Boolean = false
+        var deleteShouldFail: Boolean = false
         var loadDelayMs: Long = 0
         val loadedQueries = mutableListOf<String>()
         val savedFavorites = mutableListOf<Pair<String, Boolean>>()
         val savedEdits = mutableListOf<Edit>()
+        val createdUsers = mutableListOf<Edit>()
+        val deletedUsers = mutableListOf<String>()
+        var roles: List<String> = listOf("Tech Lead", "Android Developer")
+        private var nextId = 100
 
         var users: List<User> = listOf(
             User("u-1", "Anna", "anna@x.pl", "Android"),
             User("u-2", "Bartek", "bartek@x.pl", "iOS"),
         )
+
+        override suspend fun getRoles(): List<String> = roles
+
+        override suspend fun createUser(name: String, email: String, role: String): User {
+            createdUsers += Edit("", name, email, role)
+            if (createShouldFail) throw UserSyncException.InvalidUser("new")
+            val created = User("u-${nextId++}", name, email.lowercase(), role)
+            users = users + created
+            return created
+        }
+
+        override suspend fun deleteUser(userId: String) {
+            deletedUsers += userId
+            if (deleteShouldFail) throw UserSyncException.UserNotFound(userId)
+            users = users.filterNot { it.id == userId }
+        }
 
         override suspend fun getUsers(query: String): List<User> {
             loadedQueries += query
@@ -96,6 +121,9 @@ class UsersViewModelTest {
         searchUsers = SearchUsersUseCase(repository),
         setFavorite = SetFavoriteUseCase(repository),
         updateUser = UpdateUserUseCase(repository),
+        createUser = CreateUserUseCase(repository),
+        deleteUser = DeleteUserUseCase(repository),
+        getRoles = GetRolesUseCase(repository),
         networkFailureSwitch = repository,
         middlewares = middlewares,
     )
@@ -327,6 +355,111 @@ class UsersViewModelTest {
     }
 
     @Test
+    fun `creating a user sends it and shows the stored row`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.AddClicked)
+        vm.dispatch(UsersIntent.Ui.CreateNameChanged("  Nina Fresh  "))
+        vm.dispatch(UsersIntent.Ui.CreateEmailChanged("NINA@X.PL"))
+        vm.dispatch(UsersIntent.Ui.CreateRoleChanged("Tech Lead"))
+        vm.dispatch(UsersIntent.Ui.CreateSubmitted)
+        advanceUntilIdle()
+
+        // Trimmed by the use case before it ever reaches the wire.
+        assertEquals("Nina Fresh", repository.createdUsers.single().name)
+        assertNull(vm.state.value.creator)
+        // Lower-cased by the fake server: the list adopts the answer, not the form.
+        assertEquals("nina@x.pl", vm.state.value.users.first().email)
+    }
+
+    @Test
+    fun `an incomplete create is not sent`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.AddClicked)
+        vm.dispatch(UsersIntent.Ui.CreateNameChanged("Nina"))
+        vm.dispatch(UsersIntent.Ui.CreateSubmitted)
+        advanceUntilIdle()
+
+        assertTrue(repository.createdUsers.isEmpty())
+    }
+
+    /** Swiping asks; only the confirmed dialog deletes. */
+    @Test
+    fun `a delete is only performed after confirmation`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.DeleteClicked("u-1"))
+        advanceUntilIdle()
+        assertTrue(repository.deletedUsers.isEmpty(), "asking must not delete")
+
+        vm.dispatch(UsersIntent.Ui.DeleteConfirmed)
+        advanceUntilIdle()
+
+        assertEquals(listOf("u-1"), repository.deletedUsers)
+        assertTrue(vm.state.value.users.none { it.id == "u-1" })
+    }
+
+    @Test
+    fun `a dismissed dialog deletes nobody`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.DeleteClicked("u-1"))
+        vm.dispatch(UsersIntent.Ui.DeleteDismissed)
+        advanceUntilIdle()
+
+        assertTrue(repository.deletedUsers.isEmpty())
+        assertEquals(2, vm.state.value.users.size)
+    }
+
+    /** A failed delete keeps the row and says so, rather than losing somebody silently. */
+    @Test
+    fun `a failed delete keeps the row and reports it`() = runTest(dispatcher) {
+        val repository = TestRepository().apply { deleteShouldFail = true }
+        val effects = mutableListOf<UsersEffect>()
+        val vm = viewModel(repository)
+        collectEffects(vm, effects)
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        vm.dispatch(UsersIntent.Ui.DeleteClicked("u-1"))
+        vm.dispatch(UsersIntent.Ui.DeleteConfirmed)
+        advanceUntilIdle()
+
+        assertEquals(2, vm.state.value.users.size)
+        assertTrue(vm.state.value.deleting.isEmpty())
+        assertTrue(
+            effects.filterIsInstance<UsersEffect.ShowMessage>()
+                .any { it.text == AppString.ErrorUserNotFound.asUiText() },
+            "the failure was never reported",
+        )
+    }
+
+    /** The roles are fetched on open, so the picker has something to offer. */
+    @Test
+    fun `the role catalogue is loaded with the screen`() = runTest(dispatcher) {
+        val repository = TestRepository()
+        val vm = viewModel(repository)
+
+        vm.dispatch(UsersIntent.Ui.ScreenOpened)
+        advanceUntilIdle()
+
+        assertEquals(listOf("Android Developer", "Tech Lead"), vm.state.value.roles)
+    }
+
+    @Test
     fun `middleware observes every reduction`() = runTest(dispatcher) {
         val seen = mutableListOf<String>()
         val vm = viewModel(
@@ -337,6 +470,14 @@ class UsersViewModelTest {
         vm.dispatch(UsersIntent.Ui.ScreenOpened)
         advanceUntilIdle()
 
-        assertEquals(listOf("ScreenOpened", "LoadStarted", "LoadSucceeded"), seen)
+        // Opening the screen also fetches the role catalogue, on its own coroutine. Its
+        // result can land on either side of the load, so the load sequence is asserted in
+        // order and the catalogue separately — pinning one interleaving would be asserting
+        // on coroutine scheduling rather than on behaviour.
+        assertEquals(
+            listOf("ScreenOpened", "LoadStarted", "LoadSucceeded"),
+            seen.filterNot { it == "RolesLoaded" },
+        )
+        assertTrue("RolesLoaded" in seen, "the role catalogue was never loaded")
     }
 }

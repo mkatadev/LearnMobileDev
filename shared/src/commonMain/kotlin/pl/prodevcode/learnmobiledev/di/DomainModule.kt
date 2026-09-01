@@ -2,10 +2,14 @@ package pl.prodevcode.learnmobiledev.di
 
 import org.koin.core.module.Module
 import org.koin.dsl.module
+import pl.prodevcode.learnmobiledev.domain.usecase.CreateUserUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.DeleteUserUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetAppLanguageUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetConcurrencyScenariosUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.GetInfographicsUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetLessonsUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetQuizQuestionsUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.GetRolesUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.GetThemeModeUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.RunConcurrencyScenarioUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
@@ -25,7 +29,11 @@ val domainModule: Module = module {
     factory { SearchUsersUseCase(get()) }
     factory { SetFavoriteUseCase(get()) }
     factory { UpdateUserUseCase(get()) }
+    factory { CreateUserUseCase(get()) }
+    factory { DeleteUserUseCase(get()) }
+    factory { GetRolesUseCase(get()) }
     factory { GetLessonsUseCase(get()) }
+    factory { GetInfographicsUseCase(get()) }
     factory { GetConcurrencyScenariosUseCase(get()) }
     factory { RunConcurrencyScenarioUseCase(get()) }
     factory { GetQuizQuestionsUseCase(get()) }

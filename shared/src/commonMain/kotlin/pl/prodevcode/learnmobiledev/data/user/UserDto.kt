@@ -12,6 +12,9 @@ import pl.prodevcode.learnmobiledev.domain.model.User
 internal data class UsersResponseDto(val users: List<UserDto>)
 
 @Serializable
+internal data class RolesResponseDto(val roles: List<String>)
+
+@Serializable
 internal data class UserDto(
     val id: String,
     val name: String,
@@ -26,6 +29,10 @@ internal data class FavoriteRequestDto(val favorite: Boolean)
 @Serializable
 internal data class FavoriteResponseDto(val id: String, val favorite: Boolean)
 
+/**
+ * The body of both a create and an edit. They carry the same fields — the difference is
+ * the method and who assigns the id, not the payload.
+ */
 @Serializable
 internal data class UserEditDto(val name: String, val email: String, val role: String)
 
