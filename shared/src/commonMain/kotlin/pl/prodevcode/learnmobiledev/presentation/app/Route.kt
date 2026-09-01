@@ -24,6 +24,7 @@ sealed interface Route {
 enum class Tab(val labelRes: AppString, val iconRes: AppString) {
     Learn(AppString.TabLearn, AppString.TabLearnIcon),
     Demo(AppString.TabDemo, AppString.TabDemoIcon),
+    Info(AppString.TabInfo, AppString.TabInfoIcon),
     Test(AppString.TabTest, AppString.TabTestIcon),
     Sync(AppString.TabSync, AppString.TabSyncIcon),
 }

@@ -1,6 +1,7 @@
 package pl.prodevcode.learnmobiledev.data
 
 import java.io.File
+import pl.prodevcode.learnmobiledev.domain.model.AppLanguage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -18,11 +19,16 @@ import pl.prodevcode.learnmobiledev.domain.model.QuizCategory
 class QuestionsContentTest {
 
     /** Every shipped locale is validated, not just the default one. */
-    private val locales = File(CONTENT_ROOT)
-        .listFiles()
-        ?.filter { it.isDirectory }
-        ?.sortedBy { it.name }
-        .orEmpty()
+    /**
+     * Driven by [AppLanguage] rather than by whatever directories happen to exist. Scanning
+     * the folder made every new subdirectory look like a locale — the images the service
+     * publishes are stored there too, and they have no `lessons.json` to parse. Keying off
+     * the enum also keeps the promise this repository makes: adding a language is one entry
+     * plus one directory, and this test starts demanding it immediately.
+     */
+    private val locales = AppLanguage.SUPPORTED_TAGS
+        .sorted()
+        .map { File(CONTENT_ROOT, it) }
 
     private fun forEachLocale(block: (String, List<Question>) -> Unit) {
         assertTrue(locales.isNotEmpty(), "no content locales found")

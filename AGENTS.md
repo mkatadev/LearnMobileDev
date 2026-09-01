@@ -147,17 +147,94 @@ the backend's data and live in `:fakeApi`:
 fakeApi/src/commonMain/composeResources/files/
 ├─ en/{lessons,questions,scenarios}.json   <- default
 ├─ pl/{lessons,questions,scenarios}.json
-└─ users.json                              <- the user table, not localized
+├─ users.json                              <- the user table, not localized
+├─ roles.json                              <- the roles a user may hold, not localized
+├─ infographics.json                       <- the infographic catalogue
+└─ images/                                 <- the pictures themselves
 ```
 
 Nothing above the HTTP boundary can reach them: the app has no path to another module's
-resources and must go through `GET /api/v1/content/{resource}?lang=xx` or
-`GET /api/v1/users?q=`. Language negotiation happens on the server (`LanguageCatalog`),
-which answers with the translation it has and reports it in `Content-Language`; an
-unsupported language falls back to `en`.
+resources and must go through `GET /api/v1/content/{resource}?lang=xx`,
+`GET /api/v1/users?q=`, `GET /api/v1/roles` or `GET /api/v1/infographics`. Language
+negotiation happens on the server (`LanguageCatalog`), which answers with the translation
+it has and reports it in `Content-Language`; an unsupported language falls back to `en`.
+
+**Roles are data, not an enum and not a translation.** A role is a string stored on a user
+row, so the set of legal values is the server's to define: it publishes them, the app
+offers exactly those in a picker, and the server refuses anything else with `422`. An app
+that shipped its own copy would offer values the backend rejects and need a release to add
+one. Translating them would be worse still — the stored value would then depend on the
+language the author happened to be using.
+
+**Infographics are pictures, and pictures are not localized.** The text is baked into the
+pixels, so the catalogue states which language each image is *drawn in* rather than
+pretending a translated caption makes it readable. `ApiResponse` therefore carries a
+`ByteArray`, not a `String`: a picture decoded to text and back is a corrupt picture, and
+that is the one failure a JSON-shaped fake backend would have hidden until a device tried
+to render it.
+
+Images ship as **WebP**, and the route derives its `Content-Type` from the stored file
+rather than hardcoding one. A text-heavy infographic went from 1.7 MB as PNG to 233 KB at
+`cwebp -q 88`, with a mean per-channel error of about 1% — measured on the densest code
+block rather than eyeballed, because the whole point of the tab is reading that code at 6x
+zoom. Both platforms decode it through `decodeToImageBitmap`, which is Skia on iOS and
+`BitmapFactory` on Android; that was verified by running the app on each, since a JVM unit
+test has only a stubbed decoder and would have passed regardless.
 
 `BundledContentTest` guards the data set — every published resource, in every served
-language, the user table, and nothing the service does not publish.
+language, the user table, the role catalogue, that every seed user holds a role the service
+actually publishes, that every listed infographic has its image and dimensions, and nothing
+the service does not publish.
+
+### The user service is a full CRUD
+
+| Method | Path | Answers |
+|---|---|---|
+| `GET` | `/api/v1/users?q=` | the directory, filtered server-side |
+| `POST` | `/api/v1/users` | `201` and the stored row, id assigned by the server |
+| `PUT` | `/api/v1/users/{id}` | `200` and the stored row |
+| `DELETE` | `/api/v1/users/{id}` | `204`, or `404` if there was no such row |
+| `PUT` | `/api/v1/users/{id}/favorite` | `200`, or `409` for the locked demo user |
+| `GET` | `/api/v1/roles` | the roles a user may hold |
+
+`POST` rather than `PUT` for creation is not cosmetic: the server assigns the id, so the
+client cannot name the resource it is asking for and a repeated call creates a second
+person. That is exactly why a create must not be retried the way a favorite may be.
+
+Endpoints are **typed resources**, not interpolated strings (`ApiRoutes`, Ktor Resources).
+`"$USERS_PATH/$userId/favorite"` compiles whatever is put into it and fails on a device;
+a resource is checked by the compiler and escaped by the client, so an id containing a
+slash cannot break the request.
+
+### The infographic service
+
+| Method | Path | Answers |
+|---|---|---|
+| `GET` | `/api/v1/infographics` | the catalogue, as JSON metadata |
+| `GET` | `/api/v1/infographics/{id}/image` | the picture, typed by its stored format |
+
+Two endpoints rather than one: metadata is small and always needed, a picture is about a
+megabyte and needed only when it is shown. Inlining the bytes would make the app download
+every image to draw a list of titles, and base64 would add a third again for the privilege.
+The `path` in the metadata is the *storage's* path and is deliberately not mapped into the
+domain — the app addresses an image by id, and where the service keeps its files is its own
+business.
+
+Images are fetched concurrently by `ApiInfographicRepository` and cached. Unlike the course
+content the cache is **not** keyed by language: the text is in the pixels, so switching the
+app's language does not change which bytes are correct.
+
+**Zoom state is the exception to the "UI state lives in the store" rule.** `ZoomableImage`
+keeps scale and offset in `remember`, because losing them costs nothing a user would call a
+bug — the picture is still open, merely un-zoomed. What *would* be a bug is the viewer
+closing itself on rotation, which is why `openedId` lives in `InfographicsState`. That is
+the test to apply: not "is it UI state?" but "would losing it be a defect?".
+
+Panning is bounded to the drawn size after `ContentScale.Fit`, not to the bitmap's pixel
+size — for a tall infographic on a phone those differ by most of the picture, and limits
+computed from the wrong one let the image be flung off-screen with no way back. Pinch and
+double tap both anchor on the touch point rather than the centre, because centre-anchored
+zoom slides the detail away exactly when the user is trying to look at it.
 
 ### In-app language switching
 
@@ -282,6 +359,25 @@ More conventions:
 - **UI-only state still belongs in the state** when losing it would be a bug: an expanded
   lesson, a visible confirmation dialog, the selected tab. `var by remember` does not
   survive a configuration change.
+- **State that outlives its screen has to be cleared when the screen is left.** A draft in
+  the store outlives the composition that shows it, so leaving the details screen
+  dispatches `EditCancelled` — otherwise an edit the user never saved is still there on the
+  next visit, and since a present draft is what makes that screen render the form, it opens
+  straight into a stale form. Tie this to the deliberate act (back), not to `onDispose`: a
+  rotation also disposes the composition and must *keep* the draft.
+- **Navigation state is hoisted above the tab switch** (`openUserId` in `AppContent`,
+  `rememberSaveable`). Remembered inside a tab it would be discarded whenever another tab
+  was selected, so the user would return to the list instead of the screen they left —
+  navigation forgetting faster than the store is what makes the two disagree.
+- **Destructive actions are confirmed, and a gesture only asks.** A swipe dispatches
+  `DeleteClicked`, which opens a dialog; the row snaps back and leaves the list only on
+  `DeleteSucceeded`. A swipe is easy to perform while scrolling, and there is no flag to
+  flip back the way there is for a favorite — restoring a row means putting it back in the
+  right place in a sorted list.
+- **Optimistic updates are for reversible writes.** The favorite flag is applied
+  immediately and rolled back on failure. A create and a delete are not: the list adopts
+  what the server answered, because a create has no id until it replies and a delete has
+  nothing to put back.
 - `CancellationException` is always rethrown; it is a control signal, not a domain failure.
 
 ---
@@ -312,7 +408,16 @@ Rules:
   shipped files —
   every locale, not just the default — and check unique ids, non-empty blocks, table column
   counts, explanation length, matching `%1$s` placeholders and, for the quiz, that correct
-  answers are not always at the same index.
+  answers are not always at the same index. The authored index is only a fallback anyway:
+  `GetQuizQuestionsUseCase` shuffles the options of every served question (and moves
+  `correctIndex` with the answer), so a session can never be passed by picking one slot.
+  `GetQuizQuestionsUseCaseTest` covers that, seeded so it stays repeatable.
+- **Which locales a content test checks comes from `AppLanguage`, not from `listFiles()`.**
+  Scanning the resource directory made every new subdirectory look like a locale, so adding
+  `files/images/` for the infographics broke six unrelated tests looking for
+  `images/lessons.json`. Driving the loop off `AppLanguage.SUPPORTED_TAGS` also keeps the
+  promise this file makes: adding a language is one enum entry plus one directory, and the
+  test starts demanding the directory the moment the entry appears.
 - **Guard the promises made in this file.** Where a rule claims something is easy ("adding
   a language is one enum entry plus one directory"), a test enforces it. Rules that only
   live in prose rot; `CodeLanguagePolicyTest` and `StringResourcesTest` exist for

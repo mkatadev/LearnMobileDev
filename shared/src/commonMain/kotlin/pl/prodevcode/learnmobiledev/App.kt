@@ -28,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +56,9 @@ import pl.prodevcode.learnmobiledev.presentation.app.nameRes
 import pl.prodevcode.learnmobiledev.presentation.theme.AppTheme
 import pl.prodevcode.learnmobiledev.presentation.theme.Spacing
 import pl.prodevcode.learnmobiledev.presentation.theme.BrandColor
+import pl.prodevcode.learnmobiledev.presentation.infographics.InfographicsScreen
+import pl.prodevcode.learnmobiledev.presentation.infographics.InfographicsViewModel
+import pl.prodevcode.learnmobiledev.presentation.users.UsersIntent
 import pl.prodevcode.learnmobiledev.presentation.users.UsersScreen
 import pl.prodevcode.learnmobiledev.presentation.users.UsersViewModel
 
@@ -80,6 +84,12 @@ fun App(platformModule: Module = previewPlatformModule()) {
 private fun AppContent() {
     val shell: AppShellViewModel = koinViewModel()
     val shellState by shell.state.collectAsState()
+
+    // Hoisted above the tab switch, and saveable, so the demo tab is re-entered where it
+    // was left and survives a rotation. The edit draft it belongs with lives in the store,
+    // which outlives both, and navigation that forgot faster than the draft is what let an
+    // abandoned form come back on the next visit.
+    var openUserId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // The theme preference loads from disk asynchronously. Rendering content before it is
     // read caused a light-theme flash for people who had selected dark mode.
@@ -110,7 +120,12 @@ private fun AppContent() {
                         },
                     )
 
-                    Tab.Demo -> DemoTab()
+                    Tab.Demo -> DemoTab(
+                        openUserId = openUserId,
+                        onOpenDetails = { openUserId = it },
+                        onBack = { openUserId = null },
+                    )
+                    Tab.Info -> InfoTab()
                     Tab.Test -> TestTab()
                     Tab.Sync -> SyncTab()
                 }
@@ -239,26 +254,52 @@ private fun LearnTab(
  *
  * Navigating to details is a reaction to an **effect** (`OpenUserDetails`), not to screen
  * state, so returning from details does not open them again after recomposition.
+ *
+ * Where the user is inside this tab is hoisted to [AppContent] rather than remembered
+ * here. A tab's composition is discarded the moment another tab is selected, so state kept
+ * at this level is state the tab forgets on the way out — the user would come back to the
+ * list instead of the screen they left.
+ *
+ * Leaving the details screen also abandons the edit. The draft lives in the store, which
+ * outlives the screen, so without this an edit the user never saved would still be there
+ * on the next visit — and because a present draft *is* what makes the details screen render
+ * the form, that visit would open straight into a stale form showing a name the server
+ * never accepted. Going back is a deliberate act, whereas a rotation is not: it keeps
+ * [openUserId], so the screen and its draft both survive it.
  */
 @Composable
-private fun DemoTab() {
+private fun DemoTab(
+    openUserId: String?,
+    onOpenDetails: (String) -> Unit,
+    onBack: () -> Unit,
+) {
     val viewModel: UsersViewModel = koinViewModel()
-    var route by remember { mutableStateOf<Route>(Route.UsersList) }
 
-    when (val current = route) {
+    when (val current = openUserId?.let { Route.UserDetails(it) } ?: Route.UsersList) {
         is Route.UsersList -> UsersScreen(
             viewModel = viewModel,
-            onOpenDetails = { route = Route.UserDetails(it) },
+            onOpenDetails = onOpenDetails,
             modifier = Modifier.fillMaxSize(),
         )
 
         is Route.UserDetails -> UserDetailsScreen(
             viewModel = viewModel,
             userId = current.userId,
-            onBack = { route = Route.UsersList },
+            onBack = {
+                viewModel.dispatch(UsersIntent.Ui.EditCancelled)
+                onBack()
+            },
             modifier = Modifier.fillMaxSize(),
         )
     }
+}
+
+/** Tab with the infographics served by the content API. */
+@Composable
+private fun InfoTab() {
+    val viewModel: InfographicsViewModel = koinViewModel()
+
+    InfographicsScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
 }
 
 /** Tab with the knowledge test. */

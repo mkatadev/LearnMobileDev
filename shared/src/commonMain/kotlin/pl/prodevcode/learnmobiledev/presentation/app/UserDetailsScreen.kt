@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import pl.prodevcode.learnmobiledev.presentation.theme.Spacing
 import learnmobiledev.shared.generated.resources.Res
 import pl.prodevcode.learnmobiledev.domain.model.User
+import pl.prodevcode.learnmobiledev.presentation.users.RolePicker
 import pl.prodevcode.learnmobiledev.presentation.users.UserEditor
 import pl.prodevcode.learnmobiledev.presentation.users.UsersIntent
 import pl.prodevcode.learnmobiledev.presentation.users.UsersViewModel
@@ -60,7 +61,11 @@ fun UserDetailsScreen(
                 onEdit = { viewModel.dispatch(UsersIntent.Ui.EditClicked(userId)) },
             )
 
-            else -> UserEditorForm(editor = editor, onIntent = viewModel::dispatch)
+            else -> UserEditorForm(
+                editor = editor,
+                roles = state.roles,
+                onIntent = viewModel::dispatch,
+            )
         }
     }
 }
@@ -95,7 +100,11 @@ private fun ColumnScope.UserDetails(user: User, onEdit: () -> Unit) {
  * the same reason the rest of the screen holds no state of its own.
  */
 @Composable
-private fun UserEditorForm(editor: UserEditor, onIntent: (UsersIntent) -> Unit) {
+private fun UserEditorForm(
+    editor: UserEditor,
+    roles: List<String>,
+    onIntent: (UsersIntent) -> Unit,
+) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(Spacing.cardPadding),
@@ -121,13 +130,11 @@ private fun UserEditorForm(editor: UserEditor, onIntent: (UsersIntent) -> Unit) 
                 enabled = !editor.isSaving,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = editor.role,
-                onValueChange = { onIntent(UsersIntent.Ui.EditRoleChanged(it)) },
-                label = { Text(localized(AppString.UserEditRole)) },
-                singleLine = true,
+            RolePicker(
+                selected = editor.role,
+                roles = roles,
                 enabled = !editor.isSaving,
-                modifier = Modifier.fillMaxWidth(),
+                onRoleSelected = { onIntent(UsersIntent.Ui.EditRoleChanged(it)) },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(

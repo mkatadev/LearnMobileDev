@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "infographics": [
+    {
+      "id": "mvi-in-kmp",
+      "title": "MVI w KMP",
+      "summary": "Jednokierunkowy przepływ danych dla przewidywalnych i testowalnych aplikacji",
+      "language": "pl",
+      "width": 1024,
+      "height": 1536,
+      "path": "files/images/mvi-in-kmp.webp"
+    }
+  ]
+}

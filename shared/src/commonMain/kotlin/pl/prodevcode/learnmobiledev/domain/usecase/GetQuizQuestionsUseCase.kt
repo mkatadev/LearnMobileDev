@@ -1,5 +1,6 @@
 package pl.prodevcode.learnmobiledev.domain.usecase
 
+import kotlin.random.Random
 import pl.prodevcode.learnmobiledev.domain.model.Question
 import pl.prodevcode.learnmobiledev.domain.model.QuizCategory
 import pl.prodevcode.learnmobiledev.domain.repository.QuestionRepository
@@ -10,6 +11,8 @@ import pl.prodevcode.learnmobiledev.domain.repository.QuestionRepository
  * The rules live here rather than in the store:
  * - an empty category filter means "all categories",
  * - the order is randomised so that revision cannot rely on memorised positions,
+ * - the answer options of every question are randomised too, so the correct one does not
+ *   sit at the position the author happened to favour,
  * - [limit] caps the length of a session.
  */
 class GetQuizQuestionsUseCase(
@@ -24,13 +27,11 @@ class GetQuizQuestionsUseCase(
             .filter { categories.isEmpty() || it.category in categories }
 
         // Deterministic shuffle when a seed is supplied, so that tests stay repeatable.
-        val ordered = if (seed == null) {
-            filtered.shuffled()
-        } else {
-            filtered.shuffled(kotlin.random.Random(seed))
-        }
+        val random = if (seed == null) Random.Default else Random(seed)
 
-        return ordered.take(limit)
+        return filtered.shuffled(random)
+            .take(limit)
+            .map { it.withShuffledOptions(random) }
     }
 
     companion object {

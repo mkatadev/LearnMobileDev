@@ -203,8 +203,105 @@ class UsersReducerTest {
     }
 
     @Test
-    fun `the reducer is deterministic`() {
+    fun `a created user appears at the top of the list`() {
+        val state = UsersState(users = listOf(anna, bartek), creator = UserEditor.empty("Tech Lead"))
+        val created = User("u-9", "Nina", "nina@x.pl", "Tech Lead")
+
+        val result = reduce(state, UsersIntent.Internal.CreateSaveSucceeded(created))
+
+        assertNull(result.creator)
+        assertEquals(listOf(created, anna, bartek), result.users)
+    }
+
+    /** A rejected create keeps the typed values, for the same reason an edit does. */
+    @Test
+    fun `a rejected create keeps the form open`() {
+        val state = UsersState(roles = listOf("Tech Lead"))
+        val open = reduce(state, UsersIntent.Ui.AddClicked)
+        val typed = reduce(open, UsersIntent.Ui.CreateNameChanged("Nina"))
+        val saving = reduce(typed, UsersIntent.Internal.CreateSaveStarted)
+
+        val result = reduce(saving, UsersIntent.Internal.CreateSaveFailed(UiText.Raw("nope")))
+
+        assertEquals("Nina", result.creator?.name)
+        assertFalse(result.creator!!.isSaving)
+    }
+
+    /** The picker offers a closed list, so a blank role is never a valid starting point. */
+    @Test
+    fun `a new form starts on a real role`() {
+        val state = UsersState(roles = listOf("Android Developer", "Tech Lead"))
+
+        val result = reduce(state, UsersIntent.Ui.AddClicked)
+
+        assertEquals("Android Developer", result.creator?.role)
+    }
+
+    /** Asking is not doing: a swipe must not remove anybody on its own. */
+    @Test
+    fun `DeleteClicked only asks for confirmation`() {
         val state = UsersState(users = listOf(anna, bartek))
+
+        val result = reduce(state, UsersIntent.Ui.DeleteClicked("u-1"))
+
+        assertEquals(anna, result.pendingDeletion)
+        assertEquals(listOf(anna, bartek), result.users)
+    }
+
+    /** The row leaves only once the server agrees — there is no optimistic delete. */
+    @Test
+    fun `a confirmed delete closes the dialog but keeps the row`() {
+        val asked = reduce(
+            UsersState(users = listOf(anna, bartek)),
+            UsersIntent.Ui.DeleteClicked("u-1"),
+        )
+
+        val result = reduce(asked, UsersIntent.Ui.DeleteConfirmed)
+
+        assertNull(result.pendingDeletion)
+        assertEquals(listOf(anna, bartek), result.users)
+    }
+
+    @Test
+    fun `a deleted user is removed once the server confirms`() {
+        val deleting = reduce(
+            UsersState(users = listOf(anna, bartek)),
+            UsersIntent.Internal.DeleteStarted("u-1"),
+        )
+
+        val result = reduce(deleting, UsersIntent.Internal.DeleteSucceeded("u-1"))
+
+        assertEquals(listOf(bartek), result.users)
+        assertTrue(result.deleting.isEmpty())
+    }
+
+    /** A failed delete puts nothing back, because nothing was taken away. */
+    @Test
+    fun `a failed delete leaves the list intact`() {
+        val deleting = reduce(
+            UsersState(users = listOf(anna, bartek)),
+            UsersIntent.Internal.DeleteStarted("u-1"),
+        )
+
+        val result = reduce(deleting, UsersIntent.Internal.DeleteFailed("u-1", UiText.Raw("nope")))
+
+        assertEquals(listOf(anna, bartek), result.users)
+        assertTrue(result.deleting.isEmpty())
+    }
+
+    /** A catalogue arriving late must not silently change what the user is about to submit. */
+    @Test
+    fun `late roles do not overwrite a role the user picked`() {
+        val open = reduce(UsersState(roles = listOf("Tech Lead")), UsersIntent.Ui.AddClicked)
+        val picked = reduce(open, UsersIntent.Ui.CreateRoleChanged("QA Engineer"))
+
+        val result = reduce(picked, UsersIntent.Internal.RolesLoaded(listOf("Android Developer")))
+
+        assertEquals("QA Engineer", result.creator?.role)
+    }
+
+    @Test
+    fun `the reducer is deterministic`() {        val state = UsersState(users = listOf(anna, bartek))
         val intent = UsersIntent.Ui.QueryChanged("an")
 
         assertEquals(reduce(state, intent), reduce(state, intent))

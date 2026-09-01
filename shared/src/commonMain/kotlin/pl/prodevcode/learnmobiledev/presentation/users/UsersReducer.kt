@@ -120,11 +120,79 @@ val UsersReducer = Reducer<UsersState, UsersIntent> { state, intent ->
         // The editor stays open with the rejected values: the user needs to see and fix
         // them, and a form that empties itself on failure is a form people retype.
         is UsersIntent.Internal.EditSaveFailed -> state.mapEditor { it.copy(isSaving = false) }
+
+        // A blank form starts on a real role, because the picker offers a closed list and
+        // there is no valid empty value to start from.
+        is UsersIntent.Ui.AddClicked ->
+            state.copy(creator = UserEditor.empty(state.roles.firstOrNull().orEmpty()))
+
+        is UsersIntent.Ui.CreateNameChanged ->
+            state.mapCreator { it.copy(name = intent.name) }
+
+        is UsersIntent.Ui.CreateEmailChanged ->
+            state.mapCreator { it.copy(email = intent.email) }
+
+        is UsersIntent.Ui.CreateRoleChanged ->
+            state.mapCreator { it.copy(role = intent.role) }
+
+        is UsersIntent.Ui.CreateCancelled -> state.copy(creator = null)
+
+        is UsersIntent.Ui.CreateSubmitted -> state
+
+        is UsersIntent.Internal.CreateSaveStarted -> state.mapCreator { it.copy(isSaving = true) }
+
+        // Prepended rather than appended: the row the user just created is the one they
+        // want to see, and a list long enough to scroll would otherwise hide it.
+        is UsersIntent.Internal.CreateSaveSucceeded -> state.copy(
+            creator = null,
+            users = listOf(intent.user) + state.users,
+        )
+
+        is UsersIntent.Internal.CreateSaveFailed -> state.mapCreator { it.copy(isSaving = false) }
+
+        // Asking is not doing: the row is only marked as awaiting confirmation.
+        is UsersIntent.Ui.DeleteClicked -> state.users
+            .firstOrNull { it.id == intent.userId }
+            ?.let { state.copy(pendingDeletion = it) }
+            ?: state
+
+        is UsersIntent.Ui.DeleteDismissed -> state.copy(pendingDeletion = null)
+
+        // The dialog closes on confirmation; the row leaves only once the server agrees.
+        // Removing it here would be an optimistic delete, and unlike a favorite there is
+        // no flag to flip back — restoring a row means putting it back at the right place.
+        is UsersIntent.Ui.DeleteConfirmed -> state.copy(pendingDeletion = null)
+
+        is UsersIntent.Internal.DeleteStarted -> state.copy(
+            deleting = state.deleting + intent.userId,
+        )
+
+        is UsersIntent.Internal.DeleteSucceeded -> state.copy(
+            deleting = state.deleting - intent.userId,
+            users = state.users.filterNot { it.id == intent.userId },
+        )
+
+        is UsersIntent.Internal.DeleteFailed -> state.copy(
+            deleting = state.deleting - intent.userId,
+        )
+
+        // A form already open keeps the role the user picked: replacing it because the
+        // catalogue happened to arrive late would silently change what they are about to
+        // submit.
+        is UsersIntent.Internal.RolesLoaded -> state.copy(
+            roles = intent.roles,
+            creator = state.creator?.let {
+                if (it.role.isBlank()) it.copy(role = intent.roles.firstOrNull().orEmpty()) else it
+            },
+        )
     }
 }
 
 private fun UsersState.mapEditor(transform: (UserEditor) -> UserEditor): UsersState =
     editor?.let { copy(editor = transform(it)) } ?: this
+
+private fun UsersState.mapCreator(transform: (UserEditor) -> UserEditor): UsersState =
+    creator?.let { copy(creator = transform(it)) } ?: this
 
 private fun List<User>.toggleFavorite(userId: String) =
     map { if (it.id == userId) it.copy(isFavorite = !it.isFavorite) else it }

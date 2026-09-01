@@ -5,6 +5,7 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 import pl.prodevcode.learnmobiledev.presentation.app.AppShellViewModel
 import pl.prodevcode.learnmobiledev.presentation.concurrency.ConcurrencyViewModel
+import pl.prodevcode.learnmobiledev.presentation.infographics.InfographicsViewModel
 import pl.prodevcode.learnmobiledev.presentation.learn.LearnViewModel
 import pl.prodevcode.learnmobiledev.presentation.quiz.QuizViewModel
 import pl.prodevcode.learnmobiledev.presentation.users.UsersViewModel
@@ -26,10 +27,14 @@ val presentationModule: Module = module {
             searchUsers = get(),
             setFavorite = get(),
             updateUser = get(),
+            createUser = get(),
+            deleteUser = get(),
+            getRoles = get(),
             networkFailureSwitch = get(),
         )
     }
     viewModel { LearnViewModel(get()) }
+    viewModel { InfographicsViewModel(get()) }
     viewModel { ConcurrencyViewModel(get(), get()) }
     viewModel { QuizViewModel(get()) }
     viewModel { AppShellViewModel(get(), get(), get(), get()) }

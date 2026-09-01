@@ -144,4 +144,22 @@
     <string name="users_timeline_initial">STAN POCZĄTKOWY</string>
     <string name="users_timeline_title">Oś czasu intencji (%1$d)</string>
     <string name="users_title">MVI: Users</string>
+    <string name="user_create_title">Dodaj użytkownika</string>
+    <string name="user_created">Użytkownik dodany</string>
+    <string name="user_creating">Dodawanie…</string>
+    <string name="user_deleted">Użytkownik usunięty</string>
+    <string name="user_delete_confirm_title">Usunąć użytkownika?</string>
+    <string name="user_delete_confirm_message">%1$s zostanie trwale usunięty.</string>
+    <string name="user_deleting">Usuwanie…</string>
+    <string name="users_add">Dodaj</string>
+    <string name="users_delete">Usuń</string>
+    <string name="user_role_picker_title">Rola</string>
+    <string name="action_close">Zamknij</string>
+    <string name="error_infographics_unavailable">Nie udało się wczytać infografik.</string>
+    <string name="infographics_empty">Brak opublikowanych infografik.</string>
+    <string name="infographics_subtitle">Wizualne podsumowania serwowane przez API treści</string>
+    <string name="infographics_title">Infografiki</string>
+    <string name="infographics_zoom_hint">Dotknij, aby otworzyć • zbliż palcami, aby powiększyć</string>
+    <string name="tab_info">Info</string>
+    <string name="tab_info_icon">▦</string>
 </resources>

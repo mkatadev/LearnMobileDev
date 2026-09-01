@@ -25,4 +25,11 @@ class BundledContentStorage : ContentStorage {
     } catch (_: Exception) {
         null
     }
+
+    /** Binary payloads are returned as bytes: decoding a PNG to a string would ruin it. */
+    internal suspend fun readImageBytes(path: String): ByteArray? = try {
+        Res.readBytes(path)
+    } catch (_: Exception) {
+        null
+    }
 }

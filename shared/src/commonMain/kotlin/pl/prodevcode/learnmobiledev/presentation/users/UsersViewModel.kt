@@ -21,6 +21,9 @@ import pl.prodevcode.learnmobiledev.core.ui.UiText
 import pl.prodevcode.learnmobiledev.core.ui.asUiText
 import pl.prodevcode.learnmobiledev.domain.repository.NetworkFailureSwitch
 import pl.prodevcode.learnmobiledev.domain.repository.UserSyncException
+import pl.prodevcode.learnmobiledev.domain.usecase.CreateUserUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.DeleteUserUseCase
+import pl.prodevcode.learnmobiledev.domain.usecase.GetRolesUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SearchUsersUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.SetFavoriteUseCase
 import pl.prodevcode.learnmobiledev.domain.usecase.UpdateUserUseCase
@@ -40,6 +43,9 @@ class UsersViewModel(
     private val searchUsers: SearchUsersUseCase,
     private val setFavorite: SetFavoriteUseCase,
     private val updateUser: UpdateUserUseCase,
+    private val createUser: CreateUserUseCase,
+    private val deleteUser: DeleteUserUseCase,
+    private val getRoles: GetRolesUseCase,
     private val networkFailureSwitch: NetworkFailureSwitch? = null,
     middlewares: List<Middleware<UsersState, UsersIntent>> = listOf(LoggingMiddleware("Users")),
 ) : MviStore<UsersState, UsersIntent, UsersEffect>(
@@ -81,8 +87,10 @@ class UsersViewModel(
         after: UsersState,
     ) {
         when (intent) {
-            is UsersIntent.Ui.ScreenOpened ->
+            is UsersIntent.Ui.ScreenOpened -> {
                 loadRequests.trySend(LoadRequest(after.query, isRefresh = false))
+                loadRoles(after)
+            }
 
             is UsersIntent.Ui.QueryChanged ->
                 queryFlow.value = intent.query
@@ -106,14 +114,32 @@ class UsersViewModel(
 
             is UsersIntent.Ui.EditSubmitted -> submitEdit(after)
 
+            is UsersIntent.Ui.CreateSubmitted -> submitCreate(after)
+
+            // `before` and not `after`: the reducer has already closed the dialog, so the
+            // row it named is only still available on the state that went in.
+            is UsersIntent.Ui.DeleteConfirmed -> before.pendingDeletion?.let { performDelete(it.id) }
+
             is UsersIntent.Internal.LoadFailed ->
                 emitEffect(UsersEffect.ShowMessage(intent.message))
 
             is UsersIntent.Internal.EditSaveFailed ->
                 emitEffect(UsersEffect.ShowMessage(intent.message))
 
+            is UsersIntent.Internal.CreateSaveFailed ->
+                emitEffect(UsersEffect.ShowMessage(intent.message))
+
+            is UsersIntent.Internal.DeleteFailed ->
+                emitEffect(UsersEffect.ShowMessage(intent.message))
+
             is UsersIntent.Internal.EditSaveSucceeded ->
                 emitEffect(UsersEffect.ShowMessage(AppString.UserEditSaved.asUiText()))
+
+            is UsersIntent.Internal.CreateSaveSucceeded ->
+                emitEffect(UsersEffect.ShowMessage(AppString.UserCreated.asUiText()))
+
+            is UsersIntent.Internal.DeleteSucceeded ->
+                emitEffect(UsersEffect.ShowMessage(AppString.UserDeleted.asUiText()))
 
             is UsersIntent.Internal.FavoriteSaveFailed ->
                 emitEffect(
@@ -197,6 +223,80 @@ class UsersViewModel(
                 throw cancellation
             } catch (error: Exception) {
                 dispatch(UsersIntent.Internal.EditSaveFailed(error.toUiText()))
+            }
+        }
+    }
+
+    /**
+     * Loads the role catalogue once per session.
+     *
+     * A failure is deliberately silent: the roles are needed to *offer* a choice, not to
+     * show the list, and a snackbar about them would fire on a screen the user opened to
+     * read names. The add button is disabled while the catalogue is empty, which says the
+     * same thing without interrupting.
+     */
+    private fun loadRoles(state: UsersState) {
+        if (state.roles.isNotEmpty()) return
+        viewModelScope.launch {
+            try {
+                dispatch(UsersIntent.Internal.RolesLoaded(getRoles()))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Left empty on purpose: see above.
+            }
+        }
+    }
+
+    /**
+     * Saves the create form.
+     *
+     * Unlike an edit there is nothing to compare against, so there is no "nothing changed"
+     * shortcut — but the same two decisions are still the store's: refuse an incomplete or
+     * already running form.
+     */
+    private fun submitCreate(state: UsersState) {
+        val creator = state.creator?.takeIf { it.canSave } ?: return
+
+        dispatch(UsersIntent.Internal.CreateSaveStarted)
+        viewModelScope.launch {
+            try {
+                val created = createUser(
+                    name = creator.name,
+                    email = creator.email,
+                    role = creator.role,
+                )
+                dispatch(UsersIntent.Internal.CreateSaveSucceeded(created))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                dispatch(UsersIntent.Internal.CreateSaveFailed(error.toUiText()))
+            }
+        }
+    }
+
+    /**
+     * Deletes a user after the dialog has been confirmed.
+     *
+     * No optimistic removal: a favorite is a flag that flips back, but a row put back after
+     * a failure has to return to the right place in a sorted list, and a list that shuffles
+     * itself after an error is worse than one that waits.
+     */
+    private fun performDelete(userId: String) {
+        dispatch(UsersIntent.Internal.DeleteStarted(userId))
+        viewModelScope.launch {
+            try {
+                deleteUser(userId)
+                dispatch(UsersIntent.Internal.DeleteSucceeded(userId))
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                dispatch(
+                    UsersIntent.Internal.DeleteFailed(
+                        userId = userId,
+                        message = error.toUiText(),
+                    ),
+                )
             }
         }
     }

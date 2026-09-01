@@ -15,6 +15,7 @@ import pl.prodevcode.learnmobiledev.fakeapi.http.ApiRequest
 import pl.prodevcode.learnmobiledev.fakeapi.http.ApiResponse
 import pl.prodevcode.learnmobiledev.fakeapi.http.routing
 import pl.prodevcode.learnmobiledev.fakeapi.routes.contentRoutes
+import pl.prodevcode.learnmobiledev.fakeapi.routes.infographicRoutes
 import pl.prodevcode.learnmobiledev.fakeapi.routes.userRoutes
 
 /**
@@ -70,16 +71,22 @@ object FakeBackend {
      *   backend up on fixtures.
      * @param users the user table, likewise owned by the service. It holds the favorites
      *   accepted so far, which is why a single instance serves the whole app.
+     * @param roles the roles a user may hold. The app offers exactly these, and the service
+     *   accepts exactly these, so the two cannot drift apart.
+     * @param infographics the published pictures and their metadata.
      */
     fun createEngine(
         languages: LanguageCatalog,
         config: FakeBackendConfig = FakeBackendConfig(),
         storage: ContentStorage = BundledContentStorage(),
         users: UserDirectory = UserDirectory(),
+        roles: RoleCatalog = RoleCatalog(),
+        infographics: InfographicCatalog = InfographicCatalog(),
     ): HttpClientEngine {
         val router = routing {
             contentRoutes(storage, languages)
-            userRoutes(users)
+            userRoutes(users, roles)
+            infographicRoutes(infographics)
         }
         return MockEngine { request ->
             if (config.latencyMillis > 0) delay(config.latencyMillis)
@@ -109,7 +116,7 @@ private suspend fun HttpRequestData.toApiRequest(): ApiRequest = ApiRequest(
 )
 
 private fun MockRequestHandleScope.respondWith(response: ApiResponse): HttpResponseData = respond(
-    content = response.body,
+    content = response.bytes,
     status = HttpStatusCode.fromValue(response.status),
     headers = Headers.build {
         append(HttpHeaders.ContentType, response.contentType)

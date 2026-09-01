@@ -6,6 +6,7 @@ import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.plugins.resources.Resources
 import io.ktor.client.request.url
 
 /**
@@ -24,6 +25,9 @@ fun createContentHttpClient(
     logTraffic: Boolean = false,
 ): HttpClient = HttpClient(engine) {
     install(DefaultRequest) { url(baseUrl) }
+    // Endpoints are typed resources (see ApiRoutes), so paths and query parameters are
+    // built and escaped by the client instead of being interpolated into strings.
+    install(Resources)
     install(Logging) {
         logger = PlatformLogger
         level = if (logTraffic) LogLevel.ALL else LogLevel.NONE
