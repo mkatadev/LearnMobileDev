@@ -731,8 +731,197 @@
       ]
     },
     {
+      "id": "abstraction",
+      "title": "7. Abstract class vs interface",
+      "summary": "What each one can declare, and why the wrong choice is hard to undo",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Both an `abstract class` and an `interface` describe something incomplete: they declare members without implementing all of them, and neither can be instantiated. The similarity ends there. An interface says **what a type can do**; an abstract class says **what a family of types already is**."
+        },
+        {
+          "type": "rule",
+          "text": "Interface for a capability that unrelated types can have. Abstract class for a partially built thing whose subclasses are variations of one idea."
+        },
+        {
+          "type": "subheading",
+          "text": "Side by side"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "",
+            "interface",
+            "abstract class"
+          ],
+          "rows": [
+            [
+              "How many per type",
+              "any number",
+              "exactly one"
+            ],
+            [
+              "Constructor",
+              "none",
+              "yes, with parameters"
+            ],
+            [
+              "State (backing fields)",
+              "no",
+              "yes"
+            ],
+            [
+              "Method bodies",
+              "allowed",
+              "allowed"
+            ],
+            [
+              "Properties",
+              "abstract, or with a custom getter",
+              "abstract or fully initialised"
+            ],
+            [
+              "init block",
+              "no",
+              "yes"
+            ],
+            [
+              "Member visibility",
+              "public only",
+              "public, protected, internal, private"
+            ],
+            [
+              "Swift interop",
+              "a protocol",
+              "a class"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "The first row is the one that decides most designs. Single inheritance is a budget: a type can spend it only once, so an abstract class should be reserved for the one thing that genuinely defines what the type *is*."
+        },
+        {
+          "type": "subheading",
+          "text": "An interface can have bodies — it just cannot have state"
+        },
+        {
+          "type": "paragraph",
+          "text": "Kotlin interfaces may implement methods and declare properties, which surprises people who arrive from older Java. What they cannot do is hold a value: an interface property has no backing field, so it must be recomputed by a getter on every access."
+        },
+        {
+          "type": "code",
+          "code": "interface Cache {\n    val name: String                    // abstract: the implementor stores it\n    val isNamed: Boolean get() = name.isNotBlank()   // computed, no field\n\n    // val hits: Int = 0                // WON'T COMPILE: no backing field\n}\n\nabstract class BaseCache(override val name: String) : Cache {\n    protected var hits: Int = 0         // a field, so it must be a class\n        private set\n\n    fun record() { hits++ }\n}",
+          "caption": "The dividing line: behaviour is shareable, state is not"
+        },
+        {
+          "type": "subheading",
+          "text": "Constructors: the difference that is easy to miss"
+        },
+        {
+          "type": "paragraph",
+          "text": "An abstract class has a constructor, so it can demand its dependencies up front and guarantee an invariant before any subclass code runs. An interface has no such moment — every implementor is responsible for its own setup, and there is no way to force it."
+        },
+        {
+          "type": "code",
+          "code": "// Real example from this project — an abstract class precisely because it needs\n// a constructor, state and protected members.\nabstract class MviStore<S : MviState, I : MviIntent, E : MviEffect>(\n    initialState: S,\n    private val reducer: Reducer<S, I>,\n    private val middlewares: List<Middleware<S, I>> = emptyList(),\n) : ViewModel() {\n\n    private val _state = MutableStateFlow(initialState)   // state\n    val state: StateFlow<S> = _state.asStateFlow()\n\n    protected val processedIntents: SharedFlow<I> = /* … */   // protected\n\n    protected open fun onIntentProcessed(intent: I, before: S, after: S) = Unit\n}",
+          "caption": "MviStore.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Try to express that as an interface and three things break at once: the mutable state flow has nowhere to live, `protected` is unavailable, and the class can no longer extend `ViewModel` through the same declaration."
+        },
+        {
+          "type": "subheading",
+          "text": "The mirror image: ports are interfaces"
+        },
+        {
+          "type": "code",
+          "code": "// domain — the port declares a capability and nothing else\ninterface KeyValueStore {\n    suspend fun getString(key: String): String?\n    suspend fun putString(key: String, value: String)\n}\n\n// data — one adapter per platform, plus a fake for tests\nclass InMemoryKeyValueStore : KeyValueStore { /* … */ }",
+          "caption": "KeyValueStore.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "An abstract `KeyValueStore` would be a mistake even though it would compile. SharedPreferences and NSUserDefaults share no implementation worth inheriting, and forcing a common base would spend the single inheritance slot of every adapter on a class that contributes nothing."
+        },
+        {
+          "type": "rule",
+          "text": "Depend on interfaces, inherit from abstract classes only for shared implementation. A dependency expressed as an abstract class is a dependency on someone else's code, not on a contract."
+        },
+        {
+          "type": "subheading",
+          "text": "Why this matters for tests"
+        },
+        {
+          "type": "paragraph",
+          "text": "A fake that implements an interface is a few lines and has no behaviour it did not opt into. A fake that extends an abstract class inherits everything the base does — its constructor requirements, its state, its side effects — and the test ends up exercising the base as much as the subject."
+        },
+        {
+          "type": "code",
+          "code": "// Fake used by store tests: two methods, no inherited surprises\nprivate class FakeKeyValueStore : KeyValueStore {\n    private val values = mutableMapOf<String, String>()\n    override suspend fun getString(key: String) = values[key]\n    override suspend fun putString(key: String, value: String) { values[key] = value }\n}"
+        },
+        {
+          "type": "subheading",
+          "text": "Diamonds, and what Kotlin does about them"
+        },
+        {
+          "type": "paragraph",
+          "text": "Multiple interfaces may supply the same default body. Kotlin refuses to guess: the implementor must override the member and choose explicitly with `super<Type>`, so the ambiguity is resolved in source rather than at runtime. Abstract classes avoid the question entirely — there is only ever one of them."
+        },
+        {
+          "type": "code",
+          "code": "interface Loggable { fun describe() = \"loggable\" }\ninterface Printable { fun describe() = \"printable\" }\n\nclass Report : Loggable, Printable {\n    // Required: the compiler will not pick for you\n    override fun describe() = super<Loggable>.describe()\n}"
+        },
+        {
+          "type": "subheading",
+          "text": "In a multiplatform project"
+        },
+        {
+          "type": "paragraph",
+          "text": "A Kotlin interface becomes a Swift protocol and an abstract class becomes a Swift class, which inherits Swift's own single-inheritance rule. A deep abstract hierarchy in shared code is therefore a constraint exported to iOS as well — one more reason to keep the shared surface made of interfaces."
+        },
+        {
+          "type": "subheading",
+          "text": "And the third option: neither"
+        },
+        {
+          "type": "paragraph",
+          "text": "Shared behaviour does not always need a supertype. An extension function, a small collaborator passed into the constructor, or a `sealed interface` with data-carrying subtypes often expresses the same thing without an inheritance relationship. Prefer composition; reach for an abstract class when several types genuinely share both state and behaviour."
+        },
+        {
+          "type": "subheading",
+          "text": "Deciding in ten seconds"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Do implementors need to be free to extend something else? → **interface**",
+            "Is this a boundary the app depends on (a port)? → **interface**",
+            "Do you need to store state or run a constructor? → **abstract class**",
+            "Do you need `protected` members? → **abstract class**",
+            "Would several types share real implementation *and* state? → **abstract class**",
+            "Is it shared behaviour with no state? → consider **neither** — an extension or a collaborator"
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "When both would work, take the interface. It leaves the single inheritance slot unspent, it fakes cleanly in tests, and turning it into an abstract class later is a smaller change than untangling a hierarchy that should never have existed."
+        },
+        {
+          "type": "exercise",
+          "number": 19,
+          "text": "Find MviStore and KeyValueStore in this project. For each, list what would break if it were declared the other way — name the concrete member or dependency, not just the general principle."
+        },
+        {
+          "type": "exercise",
+          "number": 20,
+          "text": "Take UsersStore and try to move its shared loading logic into an abstract base class. Then try the same with a collaborator injected through the constructor. Compare how much of the base each test has to set up."
+        }
+      ]
+    },
+    {
       "id": "coroutines",
-      "title": "7. Coroutines and Flow",
+      "title": "8. Coroutines and Flow",
       "summary": "Scope, dispatcher, cancellation, StateFlow vs SharedFlow, cold and hot streams",
       "blocks": [
         {
@@ -997,7 +1186,7 @@
     },
     {
       "id": "rxjava",
-      "title": "8. RxJava vs Kotlin Flow",
+      "title": "9. RxJava vs Kotlin Flow",
       "summary": "Vocabulary, migration, and why Flow won on Android",
       "blocks": [
         {
@@ -1184,7 +1373,7 @@
     },
     {
       "id": "solid",
-      "title": "9. SOLID in practice",
+      "title": "10. SOLID in practice",
       "summary": "The five principles using examples from this project — and what breaks without them",
       "blocks": [
         {
@@ -1344,7 +1533,7 @@
     },
     {
       "id": "di",
-      "title": "10. Dependency Injection (Koin)",
+      "title": "11. Dependency Injection (Koin)",
       "summary": "Three modules = three layers, ViewModel scope",
       "blocks": [
         {
@@ -1377,7 +1566,7 @@
     },
     {
       "id": "kmp",
-      "title": "11. Kotlin Multiplatform",
+      "title": "12. Kotlin Multiplatform",
       "summary": "Source sets, targets, the memory model and how much is worth sharing",
       "blocks": [
         {
@@ -1573,7 +1762,7 @@
     },
     {
       "id": "platform-code",
-      "title": "12. Platform code: port or expect/actual?",
+      "title": "13. Platform code: port or expect/actual?",
       "summary": "Two ways to abstract over a platform, and how to pick the right one",
       "blocks": [
         {
@@ -1729,7 +1918,7 @@
     },
     {
       "id": "testing",
-      "title": "13. Testing in this project",
+      "title": "14. Testing in this project",
       "summary": "Reducer without coroutines, ViewModel on virtual time",
       "blocks": [
         {
@@ -1766,7 +1955,7 @@
     },
     {
       "id": "testing-kinds",
-      "title": "14. Types of tests in a mobile project",
+      "title": "15. Types of tests in a mobile project",
       "summary": "Unit, smoke, golden, Espresso/Compose UI, XCTest and XCUITest",
       "blocks": [
         {
@@ -1991,7 +2180,7 @@
     },
     {
       "id": "cheat-sheet",
-      "title": "15. Cheat sheet",
+      "title": "16. Cheat sheet",
       "summary": "Rules worth enforcing in reviews",
       "blocks": [
         {

@@ -2387,6 +2387,118 @@
       ],
       "correctIndex": 3,
       "explanation": "Single inheritance is the constraint. `sealed interface` lets a type participate in several hierarchies, which is what makes nesting like `Ui : UsersIntent` work. `UserSyncException` has no such freedom: it must extend `Exception` to be throwable, so the sealed hierarchy has to be a class. Neither performance nor deprecation plays any part."
+    },
+    {
+      "id": "kt-21",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Which capability does an abstract class have that a Kotlin interface does not?",
+      "options": [
+        "Declaring methods without a body",
+        "Holding state in a backing field and declaring a constructor",
+        "Being used as a type in a function signature",
+        "Providing default method implementations"
+      ],
+      "correctIndex": 1,
+      "explanation": "Both can declare abstract members and both can supply method bodies, so neither of those separates them. The real difference is state and construction: an interface property has no backing field and an interface has no constructor, so only an abstract class can store a value and demand its dependencies before any subclass code runs."
+    },
+    {
+      "id": "kt-22",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Why is `KeyValueStore` in this project an interface rather than an abstract class?",
+      "options": [
+        "Interfaces are faster to call at runtime",
+        "The domain layer is not allowed to declare classes",
+        "It is a port with no implementation worth sharing, and an abstract base would consume the single inheritance slot of every adapter",
+        "Abstract classes cannot declare suspend functions"
+      ],
+      "correctIndex": 2,
+      "explanation": "SharedPreferences and NSUserDefaults share nothing worth inheriting, so a common base would add no implementation while spending each adapter's one inheritance slot. Ports are contracts, and a contract expressed as an interface stays cheap to fake in tests. Dispatch cost and suspend support play no part in the decision."
+    },
+    {
+      "id": "kt-23",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "What happens when you declare `val hits: Int = 0` inside a Kotlin interface?",
+      "options": [
+        "It compiles and every implementor shares the value",
+        "It compiles and each implementor gets its own copy",
+        "It does not compile — an interface property has no backing field",
+        "It compiles only if the interface is sealed"
+      ],
+      "correctIndex": 2,
+      "explanation": "Interfaces are stateless: their properties have no backing field, so an initialiser has nowhere to store the value and the compiler rejects it. A property in an interface can only be abstract or computed by a custom getter. Storing a value requires a class, which is exactly the line that separates the two constructs."
+    },
+    {
+      "id": "kt-24",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "`MviStore` is an abstract class rather than an interface. Which set of requirements forces that?",
+      "options": [
+        "A constructor taking the initial state and reducer, private mutable state, and protected members",
+        "The need to be exhaustive in a `when`",
+        "Serialization of the state object",
+        "The requirement that stores be singletons"
+      ],
+      "correctIndex": 0,
+      "explanation": "The store receives its initial state, reducer and middlewares through a constructor, keeps a private MutableStateFlow, and exposes protected members such as processedIntents and onIntentProcessed. An interface offers none of those: no constructor, no backing field, and public-only visibility. Exhaustiveness and serialization are unrelated concerns."
+    },
+    {
+      "id": "kt-25",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "A class implements two interfaces that each provide a default body for `describe()`. What does Kotlin do?",
+      "options": [
+        "Picks the first interface listed",
+        "Picks the last interface listed",
+        "Calls both bodies in declaration order",
+        "Refuses to compile until the class overrides the member and selects one with `super<Type>`"
+      ],
+      "correctIndex": 3,
+      "explanation": "Kotlin never guesses at an inherited-member conflict. The class must override the member, and inside the override it can delegate explicitly with `super<Loggable>.describe()`. Resolving the ambiguity in source means the choice is visible at review time instead of depending on declaration order at runtime."
+    },
+    {
+      "id": "kt-26",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Why is a test fake usually easier to write against an interface than against an abstract class?",
+      "options": [
+        "Interfaces can be instantiated directly in tests",
+        "The fake implements only the declared members, instead of inheriting the base's constructor, state and side effects",
+        "Abstract classes cannot be subclassed inside a test source set",
+        "Mocking libraries only support interfaces"
+      ],
+      "correctIndex": 1,
+      "explanation": "Extending an abstract class drags in whatever the base does — constructor arguments, initialisation, stored state — so the test ends up exercising the base alongside the subject. Implementing an interface opts into nothing beyond the contract, which is why the fakes in this project are a handful of lines. Interfaces still cannot be instantiated directly."
+    },
+    {
+      "id": "kt-27",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "How do a Kotlin interface and a Kotlin abstract class appear to Swift when consumed from shared KMP code?",
+      "options": [
+        "Both become Swift protocols",
+        "Both become Swift classes",
+        "The interface becomes a protocol, the abstract class becomes a class subject to Swift's single inheritance",
+        "Neither is exported to Swift"
+      ],
+      "correctIndex": 2,
+      "explanation": "The Objective-C interop maps an interface onto a protocol and an abstract class onto a class. Because Swift classes also have single inheritance, a deep abstract hierarchy in shared code exports that constraint to the iOS side as well, which is one more reason to keep the shared surface built from interfaces."
+    },
+    {
+      "id": "kt-28",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Two unrelated screens need the same small piece of stateless formatting logic. What is the best first choice?",
+      "options": [
+        "An abstract base class both screens extend",
+        "An interface with a default implementation that both screens implement",
+        "Neither — an extension function or an injected collaborator, since no supertype relationship exists",
+        "Copy the logic into both screens"
+      ],
+      "correctIndex": 2,
+      "explanation": "Shared behaviour is not by itself a reason to create a supertype. Inheritance states that the two types are the same kind of thing, which here is untrue, and it spends the inheritance slot or adds a contract nobody depends on. Composition — an extension function or a collaborator passed in — shares the code without claiming a relationship."
     }
   ]
 }
