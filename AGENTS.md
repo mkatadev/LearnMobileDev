@@ -322,7 +322,7 @@ needs the platform window handle, does nothing on iOS, and a test double would a
 nothing. Note that `actual` cannot be faked, which is exactly why it is the exception
 rather than the rule.
 
-Lesson 10 in the app walks through this decision with both patterns side by side.
+Lesson 13 in the app walks through this decision with both patterns side by side.
 
 ---
 

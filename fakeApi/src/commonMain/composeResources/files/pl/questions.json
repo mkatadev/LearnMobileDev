@@ -2387,6 +2387,118 @@
       ],
       "correctIndex": 3,
       "explanation": "Ograniczeniem jest pojedyncze dziedziczenie. `sealed interface` pozwala typowi uczestniczyć w wielu hierarchiach i to właśnie umożliwia zagnieżdżenia w stylu `Ui : UsersIntent`. `UserSyncException` nie ma tej swobody: musi dziedziczyć z `Exception`, żeby dało się go rzucić, więc hierarchia sealed musi być klasą. Ani wydajność, ani przestarzałość nie grają tu żadnej roli."
+    },
+    {
+      "id": "kt-21",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Którą zdolność ma klasa abstrakcyjna, a nie ma jej interfejs w Kotlinie?",
+      "options": [
+        "Deklarowanie metod bez ciała",
+        "Trzymanie stanu w polu zaplecza i deklarowanie konstruktora",
+        "Użycie jako typ w sygnaturze funkcji",
+        "Dostarczanie domyślnych implementacji metod"
+      ],
+      "correctIndex": 1,
+      "explanation": "Oba mogą deklarować składowe abstrakcyjne i oba mogą dostarczyć ciała metod, więc żadna z tych rzeczy ich nie rozdziela. Prawdziwa różnica to stan i konstrukcja: właściwość interfejsu nie ma pola zaplecza, a interfejs nie ma konstruktora, więc tylko klasa abstrakcyjna może przechować wartość i zażądać zależności, zanim wykona się kod podklasy."
+    },
+    {
+      "id": "kt-22",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dlaczego `KeyValueStore` jest w tym projekcie interfejsem, a nie klasą abstrakcyjną?",
+      "options": [
+        "Interfejsy wołają się szybciej w czasie wykonania",
+        "Warstwa domain nie może deklarować klas",
+        "To port bez implementacji wartej współdzielenia, a abstrakcyjna baza zjadłaby jedyny slot dziedziczenia każdego adaptera",
+        "Klasy abstrakcyjne nie mogą deklarować funkcji suspend"
+      ],
+      "correctIndex": 2,
+      "explanation": "SharedPreferences i NSUserDefaults nie mają nic wartego dziedziczenia, więc wspólna baza nie dodałaby implementacji, a wydałaby jedyny slot dziedziczenia każdego adaptera. Porty to kontrakty, a kontrakt wyrażony interfejsem pozostaje tani do atrapowania w testach. Koszt wywołania ani obsługa suspend nie mają tu nic do rzeczy."
+    },
+    {
+      "id": "kt-23",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Co się stanie, gdy zadeklarujesz `val hits: Int = 0` wewnątrz interfejsu w Kotlinie?",
+      "options": [
+        "Skompiluje się i każda implementacja dzieli tę wartość",
+        "Skompiluje się i każda implementacja dostaje własną kopię",
+        "Nie skompiluje się — właściwość interfejsu nie ma pola zaplecza",
+        "Skompiluje się tylko wtedy, gdy interfejs jest sealed"
+      ],
+      "correctIndex": 2,
+      "explanation": "Interfejsy są bezstanowe: ich właściwości nie mają pola zaplecza, więc inicjalizator nie ma gdzie zapisać wartości i kompilator go odrzuca. Właściwość w interfejsie może być wyłącznie abstrakcyjna albo wyliczana własnym getterem. Przechowanie wartości wymaga klasy i to właśnie ta granica dzieli oba konstrukty."
+    },
+    {
+      "id": "kt-24",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "`MviStore` jest klasą abstrakcyjną, a nie interfejsem. Który zestaw wymagań to wymusza?",
+      "options": [
+        "Konstruktor przyjmujący stan początkowy i reducer, prywatny stan mutowalny oraz składowe protected",
+        "Potrzeba wyczerpującego `when`",
+        "Serializacja obiektu stanu",
+        "Wymóg, by store'y były singletonami"
+      ],
+      "correctIndex": 0,
+      "explanation": "Store dostaje stan początkowy, reducer i middleware przez konstruktor, trzyma prywatny MutableStateFlow i udostępnia składowe protected, takie jak processedIntents i onIntentProcessed. Interfejs nie oferuje żadnej z tych rzeczy: brak konstruktora, brak pola zaplecza, widoczność wyłącznie public. Wyczerpywalność i serializacja to zupełnie inne sprawy."
+    },
+    {
+      "id": "kt-25",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Klasa implementuje dwa interfejsy, z których każdy daje domyślne ciało `describe()`. Co robi Kotlin?",
+      "options": [
+        "Wybiera pierwszy wymieniony interfejs",
+        "Wybiera ostatni wymieniony interfejs",
+        "Woła oba ciała w kolejności deklaracji",
+        "Odmawia kompilacji, dopóki klasa nie nadpisze składowej i nie wskaże jednej przez `super<Typ>`"
+      ],
+      "correctIndex": 3,
+      "explanation": "Kotlin nigdy nie zgaduje przy konflikcie odziedziczonych składowych. Klasa musi nadpisać składową, a w nadpisaniu może jawnie oddelegować przez `super<Loggable>.describe()`. Rozstrzygnięcie niejednoznaczności w kodzie sprawia, że wybór widać na przeglądzie, zamiast zależeć od kolejności deklaracji w czasie wykonania."
+    },
+    {
+      "id": "kt-26",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dlaczego atrapę testową zwykle łatwiej napisać na interfejsie niż na klasie abstrakcyjnej?",
+      "options": [
+        "Interfejsy da się w testach instancjonować bezpośrednio",
+        "Atrapa implementuje tylko zadeklarowane składowe, zamiast dziedziczyć konstruktor, stan i efekty uboczne bazy",
+        "Klas abstrakcyjnych nie da się rozszerzać w testowym zestawie źródeł",
+        "Biblioteki do mockowania obsługują wyłącznie interfejsy"
+      ],
+      "correctIndex": 1,
+      "explanation": "Dziedziczenie z klasy abstrakcyjnej wciąga wszystko, co robi baza — argumenty konstruktora, inicjalizację, przechowywany stan — więc test ćwiczy bazę obok właściwego przedmiotu. Implementacja interfejsu nie zgadza się na nic poza kontraktem i dlatego atrapy w tym projekcie mają po kilka linii. Interfejsu wciąż nie da się zinstancjonować wprost."
+    },
+    {
+      "id": "kt-27",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Jak interfejs i klasa abstrakcyjna z Kotlina wyglądają dla Swifta przy konsumpcji wspólnego kodu KMP?",
+      "options": [
+        "Oba stają się protokołami Swifta",
+        "Oba stają się klasami Swifta",
+        "Interfejs staje się protokołem, a klasa abstrakcyjna klasą podlegającą pojedynczemu dziedziczeniu Swifta",
+        "Żadne z nich nie jest eksportowane do Swifta"
+      ],
+      "correctIndex": 2,
+      "explanation": "Interop z Objective-C mapuje interfejs na protokół, a klasę abstrakcyjną na klasę. Ponieważ klasy Swifta też mają pojedyncze dziedziczenie, głęboka hierarchia abstrakcyjna we wspólnym kodzie eksportuje to ograniczenie również na stronę iOS — to kolejny powód, by wspólną powierzchnię budować z interfejsów."
+    },
+    {
+      "id": "kt-28",
+      "category": "kotlin",
+      "difficulty": "senior",
+      "text": "Dwa niespokrewnione ekrany potrzebują tego samego drobnego, bezstanowego formatowania. Co wybrać najpierw?",
+      "options": [
+        "Abstrakcyjną klasę bazową, z której dziedziczą oba ekrany",
+        "Interfejs z domyślną implementacją, który oba ekrany implementują",
+        "Żadne z nich — funkcję rozszerzającą albo wstrzykniętego współpracownika, bo nie ma tu relacji nadtypu",
+        "Skopiować logikę do obu ekranów"
+      ],
+      "correctIndex": 2,
+      "explanation": "Współdzielone zachowanie samo w sobie nie jest powodem do tworzenia nadtypu. Dziedziczenie orzeka, że oba typy są tym samym rodzajem rzeczy, co tutaj nieprawda, i wydaje slot dziedziczenia albo dokłada kontrakt, od którego nikt nie zależy. Kompozycja — funkcja rozszerzająca lub podany współpracownik — dzieli kod bez deklarowania relacji."
     }
   ]
 }

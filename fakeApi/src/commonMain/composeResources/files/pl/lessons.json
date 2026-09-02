@@ -730,8 +730,197 @@
       ]
     },
     {
+      "id": "abstraction",
+      "title": "7. Klasa abstrakcyjna a interfejs",
+      "summary": "Co każde z nich potrafi zadeklarować i dlaczego zły wybór trudno później cofnąć",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Zarówno `abstract class`, jak i `interface` opisują coś niepełnego: deklarują składowe bez implementowania wszystkich i żadnego z nich nie da się zinstancjonować. Na tym podobieństwo się kończy. Interfejs mówi, **co typ potrafi**; klasa abstrakcyjna mówi, **czym rodzina typów już jest**."
+        },
+        {
+          "type": "rule",
+          "text": "Interfejs dla zdolności, którą mogą mieć niespokrewnione typy. Klasa abstrakcyjna dla częściowo zbudowanej rzeczy, której podklasy są wariantami jednej idei."
+        },
+        {
+          "type": "subheading",
+          "text": "Zestawienie"
+        },
+        {
+          "type": "table",
+          "headers": [
+            "",
+            "interface",
+            "abstract class"
+          ],
+          "rows": [
+            [
+              "Ile na typ",
+              "dowolnie wiele",
+              "dokładnie jedna"
+            ],
+            [
+              "Konstruktor",
+              "brak",
+              "tak, z parametrami"
+            ],
+            [
+              "Stan (pola zaplecza)",
+              "nie",
+              "tak"
+            ],
+            [
+              "Ciała metod",
+              "dozwolone",
+              "dozwolone"
+            ],
+            [
+              "Właściwości",
+              "abstrakcyjne lub z własnym getterem",
+              "abstrakcyjne lub w pełni zainicjowane"
+            ],
+            [
+              "Blok init",
+              "nie",
+              "tak"
+            ],
+            [
+              "Widoczność składowych",
+              "tylko public",
+              "public, protected, internal, private"
+            ],
+            [
+              "Interop ze Swiftem",
+              "protokół",
+              "klasa"
+            ]
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Pierwszy wiersz rozstrzyga większość projektów. Pojedyncze dziedziczenie to budżet: typ może go wydać tylko raz, więc klasę abstrakcyjną warto zarezerwować dla tej jednej rzeczy, która naprawdę definiuje, **czym** ten typ jest."
+        },
+        {
+          "type": "subheading",
+          "text": "Interfejs może mieć ciała — nie może mieć stanu"
+        },
+        {
+          "type": "paragraph",
+          "text": "Interfejsy w Kotlinie mogą implementować metody i deklarować właściwości, co zaskakuje osoby przychodzące ze starszej Javy. Czego nie potrafią, to przechowywać wartości: właściwość w interfejsie nie ma pola zaplecza, więc musi być wyliczana przez getter przy każdym odczycie."
+        },
+        {
+          "type": "code",
+          "code": "interface Cache {\n    val name: String                    // abstrakcyjna: implementacja ją przechowuje\n    val isNamed: Boolean get() = name.isNotBlank()   // wyliczana, bez pola\n\n    // val hits: Int = 0                // NIE SKOMPILUJE SIĘ: brak pola zaplecza\n}\n\nabstract class BaseCache(override val name: String) : Cache {\n    protected var hits: Int = 0         // pole, więc musi to być klasa\n        private set\n\n    fun record() { hits++ }\n}",
+          "caption": "Linia podziału: zachowanie da się współdzielić, stanu nie"
+        },
+        {
+          "type": "subheading",
+          "text": "Konstruktory: różnica, którą łatwo przeoczyć"
+        },
+        {
+          "type": "paragraph",
+          "text": "Klasa abstrakcyjna ma konstruktor, więc może zażądać swoich zależności z góry i zagwarantować niezmiennik, zanim wykona się jakikolwiek kod podklasy. Interfejs takiego momentu nie ma — każda implementacja odpowiada za własne przygotowanie i nie da się jej do niczego zmusić."
+        },
+        {
+          "type": "code",
+          "code": "// Prawdziwy przykład z tego projektu — klasa abstrakcyjna właśnie dlatego,\n// że potrzebuje konstruktora, stanu i składowych protected.\nabstract class MviStore<S : MviState, I : MviIntent, E : MviEffect>(\n    initialState: S,\n    private val reducer: Reducer<S, I>,\n    private val middlewares: List<Middleware<S, I>> = emptyList(),\n) : ViewModel() {\n\n    private val _state = MutableStateFlow(initialState)   // stan\n    val state: StateFlow<S> = _state.asStateFlow()\n\n    protected val processedIntents: SharedFlow<I> = /* … */   // protected\n\n    protected open fun onIntentProcessed(intent: I, before: S, after: S) = Unit\n}",
+          "caption": "MviStore.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Spróbuj wyrazić to interfejsem, a naraz psują się trzy rzeczy: mutowalny strumień stanu nie ma gdzie mieszkać, `protected` jest niedostępne, a klasa nie może już w tej samej deklaracji dziedziczyć z `ViewModel`."
+        },
+        {
+          "type": "subheading",
+          "text": "Odbicie lustrzane: porty są interfejsami"
+        },
+        {
+          "type": "code",
+          "code": "// domain — port deklaruje zdolność i nic poza tym\ninterface KeyValueStore {\n    suspend fun getString(key: String): String?\n    suspend fun putString(key: String, value: String)\n}\n\n// data — po jednym adapterze na platformę plus atrapa do testów\nclass InMemoryKeyValueStore : KeyValueStore { /* … */ }",
+          "caption": "KeyValueStore.kt"
+        },
+        {
+          "type": "paragraph",
+          "text": "Abstrakcyjny `KeyValueStore` byłby błędem, choć by się skompilował. SharedPreferences i NSUserDefaults nie mają wspólnej implementacji wartej dziedziczenia, a wymuszona wspólna baza wydałaby jedyny slot dziedziczenia każdego adaptera na klasę, która nic nie wnosi."
+        },
+        {
+          "type": "rule",
+          "text": "Zależ od interfejsów, dziedzicz z klas abstrakcyjnych tylko dla współdzielonej implementacji. Zależność wyrażona klasą abstrakcyjną to zależność od cudzego kodu, a nie od kontraktu."
+        },
+        {
+          "type": "subheading",
+          "text": "Dlaczego to ma znaczenie w testach"
+        },
+        {
+          "type": "paragraph",
+          "text": "Atrapa implementująca interfejs to kilka linii i nie ma zachowania, na które sama się nie zgodziła. Atrapa dziedzicząca z klasy abstrakcyjnej dziedziczy wszystko, co robi baza — wymagania konstruktora, stan, efekty uboczne — i test ćwiczy bazę tak samo jak przedmiot testu."
+        },
+        {
+          "type": "code",
+          "code": "// Atrapa używana w testach store'a: dwie metody, żadnych odziedziczonych niespodzianek\nprivate class FakeKeyValueStore : KeyValueStore {\n    private val values = mutableMapOf<String, String>()\n    override suspend fun getString(key: String) = values[key]\n    override suspend fun putString(key: String, value: String) { values[key] = value }\n}"
+        },
+        {
+          "type": "subheading",
+          "text": "Diament i co Kotlin z nim robi"
+        },
+        {
+          "type": "paragraph",
+          "text": "Wiele interfejsów może dostarczyć to samo domyślne ciało. Kotlin odmawia zgadywania: implementacja musi nadpisać składową i wybrać jawnie przez `super<Typ>`, więc niejednoznaczność rozstrzyga się w kodzie, a nie w czasie wykonania. Klasy abstrakcyjne w ogóle nie stawiają tego pytania — jest zawsze tylko jedna."
+        },
+        {
+          "type": "code",
+          "code": "interface Loggable { fun describe() = \"loggable\" }\ninterface Printable { fun describe() = \"printable\" }\n\nclass Report : Loggable, Printable {\n    // Wymagane: kompilator nie wybierze za ciebie\n    override fun describe() = super<Loggable>.describe()\n}"
+        },
+        {
+          "type": "subheading",
+          "text": "W projekcie multiplatformowym"
+        },
+        {
+          "type": "paragraph",
+          "text": "Interfejs Kotlina staje się protokołem Swifta, a klasa abstrakcyjna — klasą Swifta, która dziedziczy własną zasadę pojedynczego dziedziczenia. Głęboka hierarchia abstrakcyjna we wspólnym kodzie to więc ograniczenie eksportowane także na iOS — kolejny powód, by wspólną powierzchnię budować z interfejsów."
+        },
+        {
+          "type": "subheading",
+          "text": "I trzecia opcja: żadne z nich"
+        },
+        {
+          "type": "paragraph",
+          "text": "Współdzielone zachowanie nie zawsze potrzebuje nadtypu. Funkcja rozszerzająca, mały współpracownik podany w konstruktorze albo `sealed interface` z podtypami niosącymi dane często wyrażają to samo bez relacji dziedziczenia. Preferuj kompozycję; po klasę abstrakcyjną sięgaj, gdy kilka typów naprawdę dzieli i stan, i zachowanie."
+        },
+        {
+          "type": "subheading",
+          "text": "Decyzja w dziesięć sekund"
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "Czy implementacje muszą mieć swobodę dziedziczenia z czegoś innego? → **interfejs**",
+            "Czy to granica, od której zależy aplikacja (port)? → **interfejs**",
+            "Czy potrzebujesz przechowywać stan albo wykonać konstruktor? → **klasa abstrakcyjna**",
+            "Czy potrzebujesz składowych `protected`? → **klasa abstrakcyjna**",
+            "Czy kilka typów dzieliłoby realną implementację *i* stan? → **klasa abstrakcyjna**",
+            "Czy to współdzielone zachowanie bez stanu? → rozważ **żadne** — rozszerzenie albo współpracownika"
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Gdy zadziałałyby oba, wybierz interfejs. Zostawia niewydany slot pojedynczego dziedziczenia, czysto się atrapuje w testach, a zamiana go później na klasę abstrakcyjną to mniejsza zmiana niż rozplątywanie hierarchii, która nigdy nie powinna była powstać."
+        },
+        {
+          "type": "exercise",
+          "number": 19,
+          "text": "Znajdź w projekcie MviStore i KeyValueStore. Dla każdego wypisz, co by się zepsuło, gdyby zadeklarować go w drugi sposób — wskaż konkretną składową albo zależność, a nie samą ogólną zasadę."
+        },
+        {
+          "type": "exercise",
+          "number": 20,
+          "text": "Weź UsersStore i spróbuj przenieść jego wspólną logikę ładowania do abstrakcyjnej klasy bazowej. Potem zrób to samo przez współpracownika wstrzykniętego w konstruktorze. Porównaj, ile bazy musi przygotować każdy test."
+        }
+      ]
+    },
+    {
       "id": "coroutines",
-      "title": "7. Korutyny i Flow",
+      "title": "8. Korutyny i Flow",
       "summary": "Scope, dispatcher, anulowanie, StateFlow vs SharedFlow, zimne i gorące strumienie",
       "blocks": [
         {
@@ -996,7 +1185,7 @@
     },
     {
       "id": "rxjava",
-      "title": "8. RxJava vs Kotlin Flow",
+      "title": "9. RxJava vs Kotlin Flow",
       "summary": "Słownik pojęć, migracja i dlaczego Flow wygrał na Androidzie",
       "blocks": [
         {
@@ -1183,7 +1372,7 @@
     },
     {
       "id": "solid",
-      "title": "9. SOLID w praktyce",
+      "title": "10. SOLID w praktyce",
       "summary": "Pięć zasad na przykładach z tego projektu — i co się psuje bez nich",
       "blocks": [
         {
@@ -1343,7 +1532,7 @@
     },
     {
       "id": "di",
-      "title": "10. Dependency Injection (Koin)",
+      "title": "11. Dependency Injection (Koin)",
       "summary": "Trzy moduły = trzy warstwy, scope ViewModelu",
       "blocks": [
         {
@@ -1376,7 +1565,7 @@
     },
     {
       "id": "kmp",
-      "title": "11. Kotlin Multiplatform",
+      "title": "12. Kotlin Multiplatform",
       "summary": "Source sety, targety, model pamięci i ile warto współdzielić",
       "blocks": [
         {
@@ -1572,7 +1761,7 @@
     },
     {
       "id": "platform-code",
-      "title": "12. Kod platformowy: port czy expect/actual?",
+      "title": "13. Kod platformowy: port czy expect/actual?",
       "summary": "Dwa sposoby na abstrakcję nad platformą i jak wybrać właściwy",
       "blocks": [
         {
@@ -1728,7 +1917,7 @@
     },
     {
       "id": "testing",
-      "title": "13. Testowanie w tym projekcie",
+      "title": "14. Testowanie w tym projekcie",
       "summary": "Reducer bez korutyn, ViewModel na czasie wirtualnym",
       "blocks": [
         {
@@ -1765,7 +1954,7 @@
     },
     {
       "id": "testing-kinds",
-      "title": "14. Rodzaje testów w projekcie mobilnym",
+      "title": "15. Rodzaje testów w projekcie mobilnym",
       "summary": "Unit, smoke, golden, Espresso/Compose UI, XCTest i XCUITest",
       "blocks": [
         {
@@ -1990,7 +2179,7 @@
     },
     {
       "id": "cheat-sheet",
-      "title": "15. Ściąga",
+      "title": "16. Ściąga",
       "summary": "Zasady, których warto pilnować na review",
       "blocks": [
         {
